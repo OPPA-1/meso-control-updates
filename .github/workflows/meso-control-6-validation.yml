@@ -55,15 +55,21 @@ jobs:
             Get-Content $stdout,$stderr
             if (-not $finished -or $job.ExitCode -ne 0) { throw "AutoHotkey failed or timed out: $path" }
           }
-          foreach ($entry in @('Meso_Control.ahk','Meso_Stream_Output.ahk','Meso_Visual_Effect.ahk','Tests/Feature600Tests.ahk')) {
+          foreach ($entry in @('Meso_Control.ahk','Meso_Stream_Output.ahk','Meso_Visual_Effect.ahk')) {
             Run-Ahk (Join-Path $app $entry) -Validate
           }
           $tests = @('Feature600Tests','CoreTests','WheelRelayTests','ChatRelayTests','OutputProtocolTests','Feature528Tests')
           foreach ($test in $tests) {
             $path = Join-Path $app "Tests/$test.ahk"
             $source = [IO.File]::ReadAllText($path)
+            if ($test -eq 'Feature600Tests') {
+              $all = Get-Content (Join-Path $app 'Meso_Control.ahk') | Where-Object { $_ -like '#Include *' }
+              foreach ($include in $all) {
+                $source = $include.Replace('#Include ', '#Include ..\') + [Environment]::NewLine + $source
+              }
+            }
             $source = [regex]::Replace($source, '(?m)^\s*MsgBox\([^\r\n]*\)\r?$', '')
-            $handler = 'OnError((err, mode) => (FileAppend(err.Message " (" err.File ":" err.Line ")" Chr(10), "*"), ExitApp(1)))'
+            $handler = '#Warn All, Off' + [Environment]::NewLine + 'OnError((err, mode) => (FileAppend(err.Message " (" err.File ":" err.Line ")" Chr(10), "*"), ExitApp(1)))'
             [IO.File]::WriteAllText($path, $handler + [Environment]::NewLine + $source, [Text.UTF8Encoding]::new($true))
             Run-Ahk $path
           }

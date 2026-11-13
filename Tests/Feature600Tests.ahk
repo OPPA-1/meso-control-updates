@@ -34,6 +34,9 @@ ChatEffect := 0
 InputLockOwners := Map()
 LastEffectMessage := ""
 GameInputMethod := "Event"
+Clock := ActivityClock()
+Punishments := []
+CurrentPunishmentProfile := "Default"
 try {
     FileCopy(A_ScriptDir "\..\Defaults\Meso_Chaos.ini", ConfigFile)
     IniWrite("XButton2", ConfigFile, "ChatBindings", "grenade")
@@ -41,7 +44,7 @@ try {
     IniWrite("240", ConfigFile, "P14", "Value")
     chat := LoadChatSettings()
     Chat := chat
-    punishments := LoadAndMigratePunishments()
+    Punishments := LoadAndMigratePunishments()
     count := punishments.Length
     Check(LoadAndMigratePunishments().Length = count, "Migration adds the new punishments once")
     for name in ["Turn M&K Off", "Alt+Enter", "Wide View", "Change Mouse Sensitivity"] {
@@ -83,6 +86,17 @@ try {
     Check(ActiveEffects.Length = 1 && ActiveEffects[1].P.Name = "Wide View" && HasEffects("double"), "First effect can expire independently")
     CancelEffects()
     Check(!HasEffects() && !InputLockOwners.Count && !GameKeyOwners.Count, "Cancel leaves no owned inputs")
+    job := {Id: "paired", Preview: true, Spins: 2, Pool: []}
+    p1 := dark.Clone(), p1.Weight := 1
+    p2 := wide.Clone(), p2.Weight := 1
+    PrepareSpin(job, [p1, p2], 4000)
+    first := job.P.Name
+    LandSpin(job, 12000)
+    Check(job.FirstResult.Name = first && job.DisplayId = "paired#second" && !HasEffects(), "First landing starts spin two without applying an effect")
+    LandSpin(job, 20000)
+    Check(ActiveEffects.Length = 2 && ActiveEffects[1].Start = ActiveEffects[2].Start && HasEffects("paired"), "Both effects start on the second landing")
+    CancelEffects()
+    TestVbsRewards()
     state := Line("meta", 1, 1, 2000) Line("status", 0, 0, 0) Line("wheel", "idle", "", 0, 0, "", 0, 0)
     state .= Line("slots", "idle", "", 0, 0, 0, 0, 0, "", "", "", "") Line("timer", "idle", 0, 0, 0)
     state .= Line("active", "Screen Shuffle", 3000, "Active", 2000) Line("active", "Lights Out", 4000, "Active", 2000)
@@ -103,4 +117,43 @@ Check(result, description) {
     if !result
         throw Error(description)
     checks += 1
+}
+
+PublishState(*) {
+}
+
+TestVbsRewards() {
+    global RuntimeDir
+    previousData := EnvGet("LOCALAPPDATA")
+    EnvSet("LOCALAPPDATA", RuntimeDir)
+    inbox := WheelRelayBasePath() "\Inbox"
+    replies := WheelRelayBasePath() "\Replies"
+    DirCreate(inbox)
+    DirCreate(replies)
+    try {
+        for test in [["--direct 5 meso", "direct5"], ["--double meso", "double"]] {
+            host := A_WinDir "\System32\cscript.exe"
+            trigger := A_ScriptDir "\..\Meso_Wheel_Trigger.vbs"
+            process := ComObject("WScript.Shell").Exec('"' host '" //nologo "' trigger '" ' test[1])
+            packet := ""
+            deadline := NowMs() + 2500
+            while NowMs() < deadline && packet = "" {
+                loop files inbox "\*.req", "F" {
+                    path := A_LoopFileFullPath
+                    packet := FileRead(path, "UTF-8")
+                    FileDelete(path)
+                    id := RegExReplace(A_LoopFileName, "\.req$", "")
+                    WriteAtomic(replies "\" id ".ack", "QUEUED|Test")
+                    break
+                }
+                if packet = ""
+                    Sleep(15)
+            }
+            while process.Status = 0 && NowMs() < deadline
+                Sleep(15)
+            request := WheelRelayParse(packet)
+            Check(IsObject(request) && request.Mode = test[2] && request.Viewer = "meso", "VBS sends " test[2])
+            Check(process.Status != 0 && process.ExitCode = 0, "VBS reads acknowledgement for " test[2])
+        }
+    } finally EnvSet("LOCALAPPDATA", previousData)
 }

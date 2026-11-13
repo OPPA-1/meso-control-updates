@@ -74,3 +74,30 @@ PublishCooldown(now) {
         return Line("active", "COOLDOWN", Rounds.CooldownUntil, "Next round", Rounds.CooldownStart)
     return Line("active", "", 0, "", 0)
 }
+
+PrepareSpin(job, pool, now) {
+    global Clock
+    job.Pool := pool
+    job.Index := WeightedPick(pool)
+    job.P := pool[job.Index].Clone()
+    job.P.TimerGeneration := Clock.Generation
+    job.Angle := 2160 + NormAngle(-90 - SliceCenter(pool, job.Index))
+    job.VisualUntil := 0
+    job.Start := now
+    job.Phase := "spin"
+    job.DisplayId := job.HasOwnProp("FirstResult") ? job.Id "#second" : job.Id
+}
+
+LandSpin(job, now) {
+    if job.HasOwnProp("Spins") && job.Spins = 2 && !job.HasOwnProp("FirstResult") {
+        job.FirstResult := job.P
+        PrepareSpin(job, job.Pool, now)
+        PublishState(true)
+        return
+    }
+    job.Phase := "result"
+    job.VisualUntil := now + 3000
+    if job.HasOwnProp("FirstResult")
+        StartEffect(job.FirstResult, job.Preview, now, job.Id)
+    StartEffect(job.P, job.Preview, now, job.Id)
+}

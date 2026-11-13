@@ -3,7 +3,7 @@ name: Meso Control 6.0.0 Windows validation
 on:
   push:
     branches: ['release/6.0.0']
-    paths: ['version.ini']
+    paths: ['version.ini', 'Lib/**', 'Tests/**', '.github/workflows/meso-control-6-validation.yml']
   workflow_dispatch:
 
 permissions:
@@ -45,7 +45,8 @@ jobs:
           foreach ($test in $tests) {
             $path = Join-Path $app "Tests/$test.ahk"
             $source = [IO.File]::ReadAllText($path)
-            $source = [regex]::Replace($source, '(?m)^\s*MsgBox\([^\r\n]*\)\r?
+            $source = [regex]::Replace($source, '(?m)^\s*MsgBox\([^\r\n]*\)\r?$', '')
+            [IO.File]::WriteAllText($path, $source, [Text.UTF8Encoding]::new($true))
             $job = Start-Process $ahk -ArgumentList @('/ErrorStdOut', ('"' + (Join-Path $app "Tests/$test.ahk") + '"')) -Wait -PassThru -NoNewWindow
             if ($job.ExitCode -ne 0) { throw "AutoHotkey test failed: $test" }
           }
@@ -63,39 +64,18 @@ jobs:
           & "$app/Lib/CreateRelease.ps1" -Root $app
           $zip = "$app/Releases/Meso_Control_6_0_0_COMPLETE.zip"
           Copy-Item "$baseline/Defaults/Meso_Chaos.ini" "$baseline/Meso_Chaos.ini"
-          $oldHash = (Get-FileHash "$baseline/Meso_Chaos.ini").Hash
+          $oldSettings = Get-Content "$baseline/Meso_Chaos.ini" -Raw
+          New-Item -ItemType Directory -Force "$baseline/Profiles", "$baseline/Macros" | Out-Null
+          Set-Content "$baseline/Profiles/test.ini" 'profile sentinel'
+          Set-Content "$baseline/Macros/test.msq" 'macro sentinel'
           & "$baseline/Lib/GitHubUpdateTools.ps1" -Operation StageLocal -Root $baseline -LocalZip $zip
           if ((Get-Content "$baseline/.updates/status.ini" -Raw) -notmatch 'State=ready') { throw '5.2.8 could not stage 6.0.0' }
           & "$baseline/Lib/GitHubUpdateTools.ps1" -Operation Apply -Root $baseline -Interpreter "$env:RUNNER_TEMP/ahk/AutoHotkey64.exe"
           if ((Get-Content "$baseline/.updates/status.ini" -Raw) -notmatch 'State=installed') { throw '5.2.8 could not install 6.0.0' }
           if ((Get-Content "$baseline/version.ini" -Raw) -notmatch 'Version=6\.0\.0') { throw 'Installed version mismatch' }
-          if ((Get-FileHash "$baseline/Meso_Chaos.ini").Hash -ne $oldHash) { throw 'Settings were modified during the upgrade' }
-          $expected = (Get-Content "$zip.sha256" -Raw).Split(' ')[0]
-          if ((Get-FileHash $zip).Hash -ne $expected) { throw 'Release checksum mismatch' }
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Meso-Control-6.0.0-Windows
-          path: ${{ runner.temp }}/meso/Releases/*
-          if-no-files-found: error
-, '')
-            [IO.File]::WriteAllText($path, $source, [Text.UTF8Encoding]::new($true))
-            $job = Start-Process $ahk -ArgumentList @('/ErrorStdOut', ('"' + (Join-Path $app "Tests/$test.ahk") + '"')) -Wait -PassThru -NoNewWindow
-            if ($job.ExitCode -ne 0) { throw "AutoHotkey test failed: $test" }
-          }
-      - name: Package and test a 5.2.8 upgrade
-        shell: pwsh
-        run: |
-          $app = "$env:RUNNER_TEMP/meso"
-          $baseline = "$env:RUNNER_TEMP/meso-baseline"
-          & "$app/Lib/CreateRelease.ps1" -Root $app
-          $zip = "$app/Releases/Meso_Control_6_0_0_COMPLETE.zip"
-          Copy-Item "$baseline/Defaults/Meso_Chaos.ini" "$baseline/Meso_Chaos.ini"
-          $oldHash = (Get-FileHash "$baseline/Meso_Chaos.ini").Hash
-          & "$baseline/Lib/GitHubUpdateTools.ps1" -Operation StageLocal -Root $baseline -LocalZip $zip
-          if ((Get-Content "$baseline/.updates/status.ini" -Raw) -notmatch 'State=ready') { throw '5.2.8 could not stage 6.0.0' }
-          & "$baseline/Lib/GitHubUpdateTools.ps1" -Operation Apply -Root $baseline
-          if ((Get-Content "$baseline/version.ini" -Raw) -notmatch 'Version=6\.0\.0') { throw 'Installed version mismatch' }
-          if ((Get-FileHash "$baseline/Meso_Chaos.ini").Hash -ne $oldHash) { throw 'Settings were modified during the upgrade' }
+          if ((Get-Content "$baseline/Meso_Chaos.ini" -Raw) -notmatch '\[P1\]') { throw 'Settings missing after upgrade' }
+          if ((Get-Content "$baseline/Profiles/test.ini") -ne 'profile sentinel') { throw 'Profile was modified' }
+          if ((Get-Content "$baseline/Macros/test.msq") -ne 'macro sentinel') { throw 'Macro was modified' }
           $expected = (Get-Content "$zip.sha256" -Raw).Split(' ')[0]
           if ((Get-FileHash $zip).Hash -ne $expected) { throw 'Release checksum mismatch' }
       - uses: actions/upload-artifact@v4

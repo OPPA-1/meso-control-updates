@@ -162,3 +162,23 @@ jobs:
           sha256sum -c "$zip.sha256"
           unzip -tq "$zip"
           unzip -p "$zip" version.ini | tr -d '\r' | grep -Fx 'Version=6.0.0'
+
+  verify-updater:
+    needs: publish
+    runs-on: windows-latest
+    timeout-minutes: 6
+    permissions:
+      contents: read
+    steps:
+      - name: Check online from the 5.2.8 updater
+        shell: powershell
+        run: |
+          $root = "$env:RUNNER_TEMP/meso-online"
+          $baseline = "$env:RUNNER_TEMP/Meso_Control_5_2_8_COMPLETE.zip"
+          Invoke-WebRequest -UseBasicParsing 'https://github.com/OPPA-1/meso-control-updates/releases/download/5.2.8/Meso_Control_5_2_8_COMPLETE.zip' -OutFile $baseline
+          if ((Get-FileHash $baseline).Hash -ne '3c9236c5208d39ee5e919fc95bd534a6776e5503e45cf5d901ac42ce87b41c50') { throw 'Baseline ZIP checksum mismatch' }
+          Expand-Archive $baseline $root
+          & "$root/Lib/GitHubUpdateTools.ps1" -Operation Check -Root $root -Repository OPPA-1/meso-control-updates
+          $status = Get-Content "$root/.updates/status.ini" -Raw
+          Write-Output $status
+          if ($status -notmatch 'State=ready' -or $status -notmatch 'Version=6\.0\.0') { throw 'The 5.2.8 updater did not stage 6.0.0' }

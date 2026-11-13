@@ -38,18 +38,34 @@ jobs:
           Expand-Archive "$env:RUNNER_TEMP/ahk.zip" "$env:RUNNER_TEMP/ahk"
           $ahk = "$env:RUNNER_TEMP/ahk/AutoHotkey64.exe"
           $app = "$env:RUNNER_TEMP/meso"
+          function Run-Ahk($path, [switch]$Validate) {
+            $arg = @('/ErrorStdOut=UTF-8', '/Force')
+            if ($Validate) { $arg += '/Validate' }
+            $arg += '"' + $path + '"'
+            $stdout = "$env:RUNNER_TEMP/ahk-stdout.txt"
+            $stderr = "$env:RUNNER_TEMP/ahk-stderr.txt"
+            Write-Host "AutoHotkey: $path"
+            $job = Start-Process $ahk -ArgumentList $arg -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+            $finished = $job.WaitForExit(16000)
+            if (-not $finished) {
+              Get-Process -Id $job.Id | Select-Object Id, MainWindowTitle | Format-List
+              $job.Kill()
+              $job.WaitForExit()
+            }
+            Get-Content $stdout,$stderr
+            if (-not $finished -or $job.ExitCode -ne 0) { throw "AutoHotkey failed or timed out: $path" }
+          }
           foreach ($entry in @('Meso_Control.ahk','Meso_Stream_Output.ahk','Meso_Visual_Effect.ahk','Tests/Feature600Tests.ahk')) {
-            $job = Start-Process $ahk -ArgumentList @('/ErrorStdOut','/Validate', ('"' + (Join-Path $app $entry) + '"')) -Wait -PassThru -NoNewWindow
-            if ($job.ExitCode -ne 0) { throw "Invalid AutoHotkey script: $entry" }
+            Run-Ahk (Join-Path $app $entry) -Validate
           }
           $tests = @('Feature600Tests','CoreTests','WheelRelayTests','ChatRelayTests','OutputProtocolTests','Feature528Tests')
           foreach ($test in $tests) {
             $path = Join-Path $app "Tests/$test.ahk"
             $source = [IO.File]::ReadAllText($path)
             $source = [regex]::Replace($source, '(?m)^\s*MsgBox\([^\r\n]*\)\r?$', '')
-            [IO.File]::WriteAllText($path, $source, [Text.UTF8Encoding]::new($true))
-            $job = Start-Process $ahk -ArgumentList @('/ErrorStdOut', ('"' + (Join-Path $app "Tests/$test.ahk") + '"')) -Wait -PassThru -NoNewWindow
-            if ($job.ExitCode -ne 0) { throw "AutoHotkey test failed: $test" }
+            $handler = 'OnError((err, mode) => (FileAppend(err.Message " (" err.File ":" err.Line ")" Chr(10), "*"), ExitApp(1)))'
+            [IO.File]::WriteAllText($path, $handler + [Environment]::NewLine + $source, [Text.UTF8Encoding]::new($true))
+            Run-Ahk $path
           }
           foreach ($test in $tests) {
             $entry = "Tests/$test.ahk"

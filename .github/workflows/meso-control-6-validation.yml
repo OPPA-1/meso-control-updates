@@ -161,4 +161,4 @@ jobs:
           done
           sha256sum -c "$zip.sha256"
           unzip -tq "$zip"
-          unzip -p "$zip" version.ini | grep -Eq '^Version=6\.0\.0\r?$|^Version=6\.0\.0$'
+          unzip -p "$zip" version.ini | tr -d '\r' | grep -Fx 'Version=6.0.0'

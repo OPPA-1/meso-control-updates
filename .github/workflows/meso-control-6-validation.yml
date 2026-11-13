@@ -1,0 +1,68 @@
+name: Meso Control 6.0.0 Windows validation
+
+on:
+  push:
+    branches: ['release/6.0.0']
+    paths: ['version.ini']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore release baseline
+        shell: pwsh
+        run: |
+          $asset = 'Meso_Control_5_2_8_COMPLETE.zip'
+          $uri = 'https://github.com/OPPA-1/meso-control-updates/releases/download/5.2.8/' + $asset
+          Invoke-WebRequest $uri -OutFile "$env:RUNNER_TEMP/$asset"
+          $actual = (Get-FileHash "$env:RUNNER_TEMP/$asset" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne '3c9236c5208d39ee5e919fc95bd534a6776e5503e45cf5d901ac42ce87b41c50') { throw 'Baseline ZIP checksum mismatch' }
+          Expand-Archive "$env:RUNNER_TEMP/$asset" "$env:RUNNER_TEMP/meso-baseline"
+          Copy-Item "$env:RUNNER_TEMP/meso-baseline" "$env:RUNNER_TEMP/meso" -Recurse
+          foreach ($entry in @(git ls-files | Where-Object { $_ -match '^(Lib/|Tests/|StreamerBot/|Meso_.*\.(ahk|vbs)$|version\.ini$)' })) {
+            $target = Join-Path "$env:RUNNER_TEMP/meso" $entry
+            New-Item -ItemType Directory -Force (Split-Path $target) | Out-Null
+            Copy-Item -LiteralPath $entry -Destination $target -Force
+          }
+      - name: Validate with AutoHotkey
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://www.autohotkey.com/download/ahk-v2.zip -OutFile "$env:RUNNER_TEMP/ahk.zip"
+          Expand-Archive "$env:RUNNER_TEMP/ahk.zip" "$env:RUNNER_TEMP/ahk"
+          $ahk = "$env:RUNNER_TEMP/ahk/AutoHotkey64.exe"
+          $app = "$env:RUNNER_TEMP/meso"
+          foreach ($entry in @('Meso_Control.ahk','Meso_Stream_Output.ahk','Meso_Visual_Effect.ahk','Tests/Feature600Tests.ahk')) {
+            $job = Start-Process $ahk -ArgumentList @('/ErrorStdOut','/Validate', ('"' + (Join-Path $app $entry) + '"')) -Wait -PassThru -NoNewWindow
+            if ($job.ExitCode -ne 0) { throw "Invalid AutoHotkey script: $entry" }
+          }
+          foreach ($test in @('Feature600Tests','CoreTests','WheelRelayTests','ChatRelayTests','OutputProtocolTests','Feature528Tests')) {
+            $job = Start-Process $ahk -ArgumentList @('/ErrorStdOut', ('"' + (Join-Path $app "Tests/$test.ahk") + '"')) -Wait -PassThru -NoNewWindow
+            if ($job.ExitCode -ne 0) { throw "AutoHotkey test failed: $test" }
+          }
+      - name: Package and test a 5.2.8 upgrade
+        shell: pwsh
+        run: |
+          $app = "$env:RUNNER_TEMP/meso"
+          $baseline = "$env:RUNNER_TEMP/meso-baseline"
+          & "$app/Lib/CreateRelease.ps1" -Root $app
+          $zip = "$app/Releases/Meso_Control_6_0_0_COMPLETE.zip"
+          Copy-Item "$baseline/Defaults/Meso_Chaos.ini" "$baseline/Meso_Chaos.ini"
+          $oldHash = (Get-FileHash "$baseline/Meso_Chaos.ini").Hash
+          & "$baseline/Lib/GitHubUpdateTools.ps1" -Operation StageLocal -Root $baseline -LocalZip $zip
+          if ((Get-Content "$baseline/.updates/status.ini" -Raw) -notmatch 'State=ready') { throw '5.2.8 could not stage 6.0.0' }
+          & "$baseline/Lib/GitHubUpdateTools.ps1" -Operation Apply -Root $baseline
+          if ((Get-Content "$baseline/version.ini" -Raw) -notmatch 'Version=6\.0\.0') { throw 'Installed version mismatch' }
+          if ((Get-FileHash "$baseline/Meso_Chaos.ini").Hash -ne $oldHash) { throw 'Settings were modified during the upgrade' }
+          $expected = (Get-Content "$zip.sha256" -Raw).Split(' ')[0]
+          if ((Get-FileHash $zip).Hash -ne $expected) { throw 'Release checksum mismatch' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Meso-Control-6.0.0-Windows
+          path: ${{ runner.temp }}/meso/Releases/*
+          if-no-files-found: error

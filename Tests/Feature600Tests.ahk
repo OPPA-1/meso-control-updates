@@ -1,15 +1,23 @@
 ﻿#Requires AutoHotkey v2.0 64-bit
 #SingleInstance Off
 #Include ..\Lib\Core.ahk
+#Include ..\Lib\ActivityData.ahk
+#Include ..\Lib\ActivityOptions.ahk
+#Include ..\Lib\AltTab.ahk
+#Include ..\Lib\Effects.ahk
+#Include ..\Lib\MacroCodec.ahk
+#Include ..\Lib\Recorder.ahk
+#Include ..\Lib\Editor.ahk
+#Include ..\Lib\Scoreboard.ahk
 #Include ..\Lib\RoundModel.ahk
+#Include ..\Lib\Rounds.ahk
 #Include ..\Lib\ChatPolicy.ahk
 #Include ..\Lib\ChatControl.ahk
 #Include ..\Lib\WheelRelay.ahk
-#Include ..\Lib\SharedKeys.ahk
-#Include ..\Lib\Editor.ahk
 #Include ..\Lib\DirectRewards.ahk
+#Include ..\Lib\SharedKeys.ahk
 #Include ..\Lib\PunishmentOptions.ahk
-#Include ..\Lib\Effects.ahk
+#Include ..\Lib\Updates.ahk
 #Include ..\Lib\OutputState.ahk
 
 checks := 0
@@ -44,7 +52,7 @@ try {
         Check(matches = 1, name " migrates once")
     }
     Check(IniRead(ConfigFile, "P1", "Keys") = "Numpad1", "Legacy per-effect key survives migration")
-    Check(IniRead(ConfigFile, "P14", "Value") = "240", "Legacy effect value survives migration")
+    Check(Float(IniRead(ConfigFile, "P14", "Value")) = 240, "Legacy effect value survives migration")
     SharedKeys := LoadSharedKeys(ConfigFile, punishments, chat)
     Check(SharedKeys.Keys.Count = 21 && SharedKeys.Keys["grenade"] = "XButton2", "All shared fields and saved mouse bind")
     IniWrite("XButton1", ConfigFile, "SharedKeybinds", "grenade")

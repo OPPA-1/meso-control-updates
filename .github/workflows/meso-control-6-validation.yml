@@ -33,7 +33,8 @@ jobs:
       - name: Validate with AutoHotkey
         shell: pwsh
         run: |
-          Invoke-WebRequest https://www.autohotkey.com/download/ahk-v2.zip -OutFile "$env:RUNNER_TEMP/ahk.zip"
+          Invoke-WebRequest https://github.com/AutoHotkey/AutoHotkey/releases/download/v2.0.31/AutoHotkey_2.0.31.zip -OutFile "$env:RUNNER_TEMP/ahk.zip"
+          if ((Get-FileHash "$env:RUNNER_TEMP/ahk.zip").Hash -ne 'ca1a595aca4528755d8d4cd7fed23d497a37bd9a0b6892072612d68dee1bd00a') { throw 'AutoHotkey ZIP checksum mismatch' }
           Expand-Archive "$env:RUNNER_TEMP/ahk.zip" "$env:RUNNER_TEMP/ahk"
           $ahk = "$env:RUNNER_TEMP/ahk/AutoHotkey64.exe"
           $app = "$env:RUNNER_TEMP/meso"

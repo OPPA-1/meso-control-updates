@@ -7,6 +7,7 @@
 #Include Lib\AltTab.ahk
 #Include Lib\Effects.ahk
 #Include Lib\GameplayInput.ahk
+#Include Lib\Sensitivity.ahk
 #Include Lib\MacroCodec.ahk
 #Include Lib\Recorder.ahk
 #Include Lib\Editor.ahk
@@ -77,7 +78,6 @@ GameKeyOwners.CaseSense := "Off"
 ActiveEffects := []
 InputLockOwners := Map()
 GameplayLock := 0
-RawSensitivity := 0
 VisualHits := Map()
 ChatEffect := 0
 DirectPending := []
@@ -201,7 +201,7 @@ BuildMainWindow()
 InitUpdates()
 SetTimer(RefreshUpdateStatus, 350)
 OnMessage(0x4A, ReceiveMesoCommand)
-OnMessage(0xFF, ReceiveRawMouse)
+OnMessage(0xFF, RecordRawMouse)
 WheelRelayInitialize()
 SetTimer(ReadWheelRelay, 75)
 SetTimer(ReadChatRelay, 65)
@@ -1277,13 +1277,6 @@ Shutdown(reason, code) {
         try SavePending()
     CloseStreamOutput()
     try FileDelete(RuntimeDir "\controller.info")
-}
-
-ReceiveRawMouse(wParam, lParam, msg, hwnd) {
-    global Recorder
-    if Recorder.Phase = "recording"
-        return RecordRawMouse(wParam, lParam, msg, hwnd)
-    ProcessRawSensitivity(wParam, lParam, msg, hwnd)
 }
 
 RestartElevated(*) {

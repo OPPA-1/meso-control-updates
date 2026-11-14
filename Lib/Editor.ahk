@@ -294,7 +294,7 @@ OpenSettings(*) {
     global SlotTickPathEdit, SlotLandPathEdit, SlotTickSlider, SlotLandSlider, SlotTickSoundPath, SlotLandSoundPath, SlotTickVolume, SlotLandVolume
     global EditorBindButton, InputMethodDrop, GameInputMethod, ModeDrop, WheelDisplayMode, AutoCheck, SlotAutoRoll, DestinyCheck, DestinyOnlyMode, SettingsGuideCheck, Guides, OutputEnabled
     global SequenceSlider, TtsSlider, SequenceVolumeLabel, TtsVolumeLabel, SpeakCheck, ViewerCheck, SequenceVolume, TtsVolume, TtsEnabled, ViewerVisible, SpinAnnouncementVolume, AnnouncementSlider, AnnouncementLabel
-    global PunishmentProfileDrop, EditorVary, EditorGrid, EditorKeyLabel, EditorValueLabel, EditorRawKeys
+    global PunishmentProfileDrop, EditorVary, EditorGrid, EditorKeyLabel, EditorValueLabel, EditorRawKeys, EditorRange, RawAccelButton
     if GuiHwndSafe(SettingsGui) {
         SettingsGui.Show()
         return
@@ -344,6 +344,9 @@ OpenSettings(*) {
     EditorVary.OnEvent("Click", UpdateEditorHint)
     EditorGrid := SettingsGui.AddDropDownList("x620 y427 w164 Hidden", PunishmentGridChoices())
     EditorGrid.Choose(1)
+    EditorRange := SettingsGui.AddText("x553 y470 w230 h24 Hidden cAA95BF", "")
+    RawAccelButton := SettingsGui.AddButton("x322 y461 w216 h30 Hidden", "Link Raw Accel")
+    RawAccelButton.OnEvent("Click", ChooseRawAccel)
     EditorRawKeys := ""
     for spec in [[35, "New", EditorAdd, 75], [118, "Save", EditorSave, 78], [204, "Delete", EditorDelete, 78], [290, "Record inputs", OpenRecorder, 129], [427, "Preview", PreviewSelected, 108], [544, "Live test", LiveTestSelected, 125]] {
         b := SettingsGui.AddButton("x" spec[1] " y510 w" spec[4] " h33", spec[2])
@@ -538,7 +541,7 @@ EditorRowSelected(control, index, selected) {
             EditorAction.Choose(i)
     EditorRawKeys := p.Keys
     EditorKeys.Value := p.Keys
-    EditorValue.Value := p.Value
+    EditorValue.Value := FixedPunishmentValue(p)
     EditorVary.Value := PunishmentVaries(p)
     grid := p.HasOwnProp("Grid") ? p.Grid : "2x3"
     EditorGrid.Choose(1)
@@ -549,7 +552,7 @@ EditorRowSelected(control, index, selected) {
 }
 
 UpdateEditorHint(*) {
-    global EditorAction, EditorKeys, EditorKeyLabel, EditorBindButton, EditorValue, EditorValueLabel, EditorVary, EditorGrid
+    global EditorAction, EditorKeys, EditorKeyLabel, EditorBindButton, EditorValue, EditorValueLabel, EditorVary, EditorGrid, EditorRange, RawAccelButton
     action := EditorAction.Text
     global EditorRawKeys
     shared := SharedKeysForAction(action, KeyTokens(EditorRawKeys))
@@ -571,6 +574,12 @@ UpdateEditorHint(*) {
     EditorGrid.Enabled := !EditorVary.Value
     EditorValue.Visible := valueLabels.Has(action) && action != "Screen Shuffle"
     EditorValue.Enabled := !variable || !EditorVary.Value
+    limits := PunishmentValueRange(action)
+    EditorRange.Visible := IsObject(limits) && EditorValue.Enabled
+    EditorRange.Text := IsObject(limits) ? limits.Label : ""
+    RawAccelButton.Visible := action = "Change Mouse Sensitivity"
+    if RawAccelButton.Visible
+        RawAccelButton.Text := RawAccelFolder() = "" ? "Link Raw Accel" : "Change Raw Accel folder"
 }
 
 EditorAdd(*) {
@@ -599,6 +608,12 @@ EditorSave(*) {
     action := EditorAction.Text
     if action = ""
         return false
+    value := Float(EditorValue.Value)
+    limits := PunishmentValueRange(action)
+    if IsObject(limits) && EditorValue.Enabled && (value < limits.Min || value > limits.Max) {
+        MsgBox("Enter a value from " limits.Label ".", "Meso Control")
+        return false
+    }
     for a in ["Spam Key", "Send Chat"] {
         if action = a {
             tokens := KeyTokens(EditorKeys.Value)
@@ -619,7 +634,7 @@ EditorSave(*) {
     }
     savedKeys := SharedKeysForAction(action).Length ? EditorRawKeys : Trim(EditorKeys.Value)
     original := Punishments[i]
-    Punishments[i] := {Name: SubStr(Trim(EditorName.Value), 1, 80), Enabled: EditorEnabled.Value = 1, Duration: d, Weight: w, Action: action, Keys: savedKeys, Value: Float(EditorValue.Value), Vary: EditorVary.Visible && EditorVary.Value, Grid: PunishmentGrid(EditorGrid.Text)}
+    Punishments[i] := {Name: SubStr(Trim(EditorName.Value), 1, 80), Enabled: EditorEnabled.Value = 1, Duration: d, Weight: w, Action: action, Keys: savedKeys, Value: value, Vary: EditorVary.Visible && EditorVary.Value, Grid: PunishmentGrid(EditorGrid.Text)}
     if !SavePunishments() {
         Punishments[i] := original
         return false

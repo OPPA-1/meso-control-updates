@@ -6,6 +6,7 @@
 #Include ..\Lib\AltTab.ahk
 #Include ..\Lib\Effects.ahk
 #Include ..\Lib\GameplayInput.ahk
+#Include ..\Lib\Sensitivity.ahk
 #Include ..\Lib\MacroCodec.ahk
 #Include ..\Lib\Recorder.ahk
 #Include ..\Lib\Editor.ahk
@@ -106,7 +107,7 @@ try {
     parsed := ParseOutputState(state)
     Check(parsed.ActiveItems.Length = 2, "Both effects reach the OBS state")
     Check(OutputPanelKeys(parsed, 3100)[3] != "idle", "Second OBS effect outlasts first")
-    FileAppend("PASS " checks " Meso Control 6.0.0 checks`n", "*")
+    FileAppend("PASS " checks " Meso Control 6.0.2 checks`n", "*")
 } catch as err {
     FileAppend("FAIL: " err.Message " (" err.File ":" err.Line ")`n", "*")
     ExitApp(1)
@@ -162,15 +163,17 @@ TestVbsRewards() {
 }
 
 TestGameplayInput() {
-    high := 0.0, low := 0.0, reverse := 0.0
-    Check(RawMouseCorrection(5, 3.0, &high) = 10, "3x adds two times the raw delta")
-    sum := 0
-    loop 4
-        sum += RawMouseCorrection(1, 0.25, &low)
-    Check(sum = -3 && low = 0, "0.25x keeps fractional motion")
-    Check(RawMouseCorrection(-8, 0.5, &reverse) = 4, "Low sensitivity corrects negative motion")
+    random := {Action: "Change Mouse Sensitivity", Vary: true, Value: 1}
+    Check(SensitivityMultiplier(random, true) = 3.0, "Random high is 3x")
+    Check(SensitivityMultiplier(random, false) = 0.25, "Random low is 0.25x")
     Check(SensitivityMultiplier({Action: "Change Mouse Sensitivity", Vary: false, Value: 1.5}) = 1.5, "Fixed sensitivity preserves 1.5x")
     Check(SensitivityMultiplier({Action: "Change Mouse Sensitivity", Vary: false, Value: 0.5}) = 0.5, "Fixed sensitivity preserves 0.5x")
+    Check(PunishmentValueRange("Lights Out").Max = 240 && PunishmentValueRange("Lights Out").Min = 100, "Lights Out shows its previous range")
+    Check(PunishmentValueRange("Tunnel Vision").Min = 1.1 && PunishmentValueRange("Tunnel Vision").Max = 4, "Tunnel Vision shows its previous range")
+    Check(FixedPunishmentValue({Action: "Wide View", Value: 3}) = 0.95, "Wide View uses its supported upper limit")
+    Check(FixedPunishmentValue({Action: "Change Mouse Sensitivity", Value: 10}) = 5, "Manual sensitivity uses its supported upper limit")
+    visual := FileRead(A_ScriptDir "\..\Meso_Visual_Effect.ahk", "UTF-8")
+    Check(InStr(visual, 'MagShowSystemCursor", "Int", false') && InStr(visual, 'MagShowSystemCursor", "Int", true'), "Wide View hides and restores the system cursor")
     TestInputHooks()
 }
 

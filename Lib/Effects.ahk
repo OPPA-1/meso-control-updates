@@ -445,7 +445,7 @@ TryActivateEffect(now) {
             LogEvent("Loadout Roulette will run without input blocking")
         }
     } else if p.Action = "Change Mouse Sensitivity" {
-        try StartRawSensitivity(Effect)
+        try StartSensitivityWorker(Effect, now)
         catch as err {
             BlockEffect(err.Message, now)
             return false
@@ -472,6 +472,7 @@ AdvanceOneEffect(now) {
     }
     ReleaseDueKeys(now)
     CheckVisualWorker(now)
+    CheckSensitivityWorker(Effect, now)
     if now >= Effect.End {
         FinishEffect()
         return
@@ -758,7 +759,7 @@ FinishEffect(reason := "") {
             GameKeyOwners.Delete(key)
     }
     try RestoreEffectClipboard(Effect)
-    try StopRawSensitivity(Effect)
+    try StopSensitivityWorker(Effect)
     try EndGameplayInputLock(Effect)
     if Effect.VisualFile != "" {
         try WriteAtomic(Effect.VisualFile ".cancel", "cancel")
@@ -801,7 +802,7 @@ IsVisualEffect(action) {
 
 EffectsConflict(a, b) {
     if a = b
-        return a = "Chat Control" || a = "Random Loadout" || a = "Change Mouse Sensitivity" || a = "Alt+Enter" || a = "Send Chat"
+        return a = "Chat Control" || a = "Random Loadout" || a = "Wide View" || a = "Change Mouse Sensitivity" || a = "Alt+Enter" || a = "Send Chat"
     return (a = "Alt+Enter" || a = "Random Loadout") && b = "Send Chat"
         || (b = "Alt+Enter" || b = "Random Loadout") && a = "Send Chat"
         || a = "Alt+Enter" && b = "Random Loadout" || b = "Alt+Enter" && a = "Random Loadout"

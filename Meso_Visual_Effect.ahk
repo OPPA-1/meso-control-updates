@@ -1,6 +1,7 @@
 ﻿#Requires AutoHotkey v2.0 64-bit
 #SingleInstance Off
 #Include Lib\Core.ahk
+#Include Lib\PunishmentOptions.ahk
 RuntimeDir := A_ScriptDir "\runtime"
 DirCreate(RuntimeDir)
 if A_Args.Length != 6
@@ -12,6 +13,7 @@ amount := mode = "puzzle" ? 1.0 : Float(A_Args[4])
 grid := mode = "puzzle" && RegExMatch(A_Args[4], "^[2-5]x[2-6]$") ? StrSplit(A_Args[4], "x") : [2, 3]
 PuzzleRows := Integer(grid[1]), PuzzleColumns := Integer(grid[2])
 WideThumbnail := 0
+WideCursorHidden := false
 parent := Integer(A_Args[5])
 StatusPath := A_Args[6]
 finish := 0
@@ -55,21 +57,23 @@ try {
     EffectGui.MarginX := 0
     EffectGui.MarginY := 0
     opacity := 255
-    if mode = "dark" {
-        opacity := Round(Max(100, Min(240, amount)))
-        DarkPanel := EffectGui.AddText("x0 y0 w" w " h" h " Background050208", "")
-    } else if mode = "wide" {
-        amount := Max(0.25, Min(0.95, amount))
-        if DllCall("dwmapi\DwmRegisterThumbnail", "Ptr", EffectGui.Hwnd, "Ptr", target, "Ptr*", &WideThumbnail, "Int") < 0
-            throw Error("Game preview could not be created")
-    } else if mode = "zoom" || mode = "puzzle" || mode = "drunk" || mode = "mirror" {
+    if mode = "wide" || mode = "zoom" || mode = "puzzle" || mode = "drunk" || mode = "mirror" {
         MagLibrary := DllCall("kernel32\LoadLibraryW", "WStr", A_WinDir "\System32\Magnification.dll", "Ptr")
         if !MagLibrary
             throw Error("Windows magnification library could not load")
         initialized := DllCall("Magnification\MagInitialize", "Int")
         if !initialized
             throw Error("Windows magnification initialization failed")
-        amount := mode = "zoom" ? Max(1.1, Min(4.0, amount)) : mode = "drunk" ? 1.17 : 1.0
+    }
+    if mode = "dark" {
+        opacity := Round(FixedPunishmentValue({Action: "Lights Out", Value: amount}))
+        DarkPanel := EffectGui.AddText("x0 y0 w" w " h" h " Background050208", "")
+    } else if mode = "wide" {
+        amount := FixedPunishmentValue({Action: "Wide View", Value: amount})
+        if DllCall("dwmapi\DwmRegisterThumbnail", "Ptr", EffectGui.Hwnd, "Ptr", target, "Ptr*", &WideThumbnail, "Int") < 0
+            throw Error("Game preview could not be created")
+    } else if mode = "zoom" || mode = "puzzle" || mode = "drunk" || mode = "mirror" {
+        amount := mode = "zoom" ? FixedPunishmentValue({Action: "Tunnel Vision", Value: amount}) : mode = "drunk" ? 1.17 : 1.0
         excluded := Buffer(A_PtrSize, 0)
         NumPut("Ptr", EffectGui.Hwnd, excluded)
         count := mode = "puzzle" ? PuzzleRows * PuzzleColumns : 1
@@ -124,6 +128,12 @@ try {
     if !WinActive("ahk_id " target) || FileExist(StatusPath ".cancel")
         throw Error("Game lost focus during visual startup")
     EffectGui.Show("NoActivate x" x " y" y " w" w " h" h)
+    if mode = "wide" {
+        OnMessage(0x20, HideOverlayCursor)
+        WideCursorHidden := DllCall("Magnification\MagShowSystemCursor", "Int", false, "Int") != 0
+        if !WideCursorHidden
+            LogEvent("Wide View could not hide the Windows system cursor")
+    }
     if !DllCall("user32\IsWindowVisible", "Ptr", EffectGui.Hwnd, "Int")
         throw Error("Visual overlay window did not become visible")
     finish := NowMs() + duration
@@ -145,6 +155,14 @@ return
 ReportVisual(state, detail := "") {
     global StatusPath, finish
     try WriteAtomic(StatusPath, Line(ProcessExist(), NowMs(), state, detail, finish))
+}
+
+HideOverlayCursor(wParam, lParam, msg, hwnd) {
+    global EffectGui
+    if hwnd = EffectGui.Hwnd {
+        DllCall("user32\SetCursor", "Ptr", 0, "Ptr")
+        return 1
+    }
 }
 
 MakeRect(left, top, right, bottom) {
@@ -378,10 +396,14 @@ ReleaseMirrorInterface(&interfacePtr) {
 Cleanup(*) {
     global EffectGui, MirrorDevice, MirrorTarget, MirrorVisual, MirrorSurface
     global MirrorD3DDevice, MirrorD3DContext, MirrorDXGIDevice
-    global initialized, MagLibrary, WorkerClosing, StatusPath, mag, DarkPanel, PuzzleMags, PuzzleOrder, TimerResolutionActive, WideThumbnail
+    global initialized, MagLibrary, WorkerClosing, StatusPath, mag, DarkPanel, PuzzleMags, PuzzleOrder, TimerResolutionActive, WideThumbnail, WideCursorHidden
     if WorkerClosing
         return
     WorkerClosing := true
+    if WideCursorHidden {
+        try DllCall("Magnification\MagShowSystemCursor", "Int", true, "Int")
+        WideCursorHidden := false
+    }
     if WideThumbnail
         try DllCall("dwmapi\DwmUnregisterThumbnail", "Ptr", WideThumbnail, "Int")
     ReleaseMirrorInterface(&MirrorSurface)

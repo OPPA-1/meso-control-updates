@@ -5,6 +5,7 @@
 #Include ..\Lib\ActivityOptions.ahk
 #Include ..\Lib\AltTab.ahk
 #Include ..\Lib\Effects.ahk
+#Include ..\Lib\GameplayInput.ahk
 #Include ..\Lib\MacroCodec.ahk
 #Include ..\Lib\Recorder.ahk
 #Include ..\Lib\Editor.ahk
@@ -97,6 +98,8 @@ try {
     Check(ActiveEffects.Length = 2 && ActiveEffects[1].Start = ActiveEffects[2].Start && HasEffects("paired"), "Both effects start on the second landing")
     CancelEffects()
     TestVbsRewards()
+    TestGameplayInput()
+    Check(DirectArguments(5, 'C:\Meso Control\Meso_Wheel_Trigger.vbs') = '//B //NoLogo "C:\Meso Control\Meso_Wheel_Trigger.vbs" --direct 5 %userName%', "Copied Streamer.bot arguments preserve the quoted path")
     state := Line("meta", 1, 1, 2000) Line("status", 0, 0, 0) Line("wheel", "idle", "", 0, 0, "", 0, 0)
     state .= Line("slots", "idle", "", 0, 0, 0, 0, 0, "", "", "", "") Line("timer", "idle", 0, 0, 0)
     state .= Line("active", "Screen Shuffle", 3000, "Active", 2000) Line("active", "Lights Out", 4000, "Active", 2000)
@@ -156,4 +159,35 @@ TestVbsRewards() {
             Check(process.Status != 0 && process.ExitCode = 0, "VBS reads acknowledgement for " test[2])
         }
     } finally EnvSet("LOCALAPPDATA", previousData)
+}
+
+TestGameplayInput() {
+    high := 0.0, low := 0.0, reverse := 0.0
+    Check(RawMouseCorrection(5, 3.0, &high) = 10, "3x adds two times the raw delta")
+    sum := 0
+    loop 4
+        sum += RawMouseCorrection(1, 0.25, &low)
+    Check(sum = -3 && low = 0, "0.25x keeps fractional motion")
+    Check(RawMouseCorrection(-8, 0.5, &reverse) = 4, "Low sensitivity corrects negative motion")
+    Check(SensitivityMultiplier({Action: "Change Mouse Sensitivity", Vary: false, Value: 1.5}) = 1.5, "Fixed sensitivity preserves 1.5x")
+    Check(SensitivityMultiplier({Action: "Change Mouse Sensitivity", Vary: false, Value: 0.5}) = 0.5, "Fixed sensitivity preserves 0.5x")
+    TestInputHooks()
+}
+
+TestInputHooks() {
+    global GameplayLock
+    target := DllCall("user32\GetForegroundWindow", "Ptr")
+    if !target
+        return
+    GameplayLock := {Target: target, Modifiers: Map(0xA2, false, 0xA3, false, 0xA4, false, 0xA5, false)}
+    try {
+        kb := Buffer(24, 0), mouse := Buffer(32, 0)
+        NumPut("UInt", 0x57, kb)
+        Check(GameplayKeyboardHook(0, 0x100, kb) = 1, "Focused lock swallows physical keyboard input")
+        Check(GameplayMouseHook(0, 0x200, mouse) = 1, "Focused lock swallows physical mouse input")
+        NumPut("UInt", 0x10, kb, 8)
+        NumPut("UInt", 1, mouse, 12)
+        Check(GameplayKeyboardHook(0, 0x100, kb) != 1, "Loadout keyboard injection is allowed")
+        Check(GameplayMouseHook(0, 0x201, mouse) != 1, "Loadout mouse injection is allowed")
+    } finally GameplayLock := 0
 }

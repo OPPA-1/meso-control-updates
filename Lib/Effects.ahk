@@ -96,7 +96,10 @@ D2LoadoutCoords(hwnd, slot) {
 D2LoadoutHover(hwnd, slot) {
     if !WinActive("ahk_id " hwnd)
         return false
+    global InputLockOwners
     pos := D2LoadoutCoords(hwnd, slot)
+    if InputLockOwners.Count
+        return MoveLockedCursor(pos.X, pos.Y)
     return DllCall("user32\SetCursorPos", "Int", pos.X, "Int", pos.Y, "Int") != 0
 }
 
@@ -183,10 +186,10 @@ InjectDown(key, releaseAt := 0) {
 }
 
 InjectUp(key) {
-    global EffectOwnedKeys, Effect, GameKeyOwners
+    global EffectOwnedKeys, Effect, GameKeyOwners, InputLockOwners
     key := SimpleKey(key)
     if EffectOwnedKeys.Has(key) {
-        if !KeyIsPhysical(key) || Effect.InputLock || key = "LAlt" && Effect.P.Action = "Alt+Enter" {
+        if !KeyIsPhysical(key) || InputLockOwners.Count || key = "LAlt" && Effect.P.Action = "Alt+Enter" {
             SendGameKey(key, false)
             if IsObject(Effect)
                 Effect.SentUp += 1
@@ -431,12 +434,18 @@ TryActivateEffect(now) {
             return false
         }
     } else if p.Action = "Turn M&K Off" || p.Action = "Random Loadout" {
-        if !AcquireInputLock(Effect) {
-            BlockEffect("Windows could not block input", now)
+        if BeginGameplayInputLock(Effect) {
+            Effect.Note := "Input blocked"
+        } else if p.Action = "Turn M&K Off" {
+            BlockEffect("Input block unavailable. Restart Meso Control as administrator.", now)
             return false
+        } else {
+            Effect.InputLockUnavailable := true
+            Effect.Note := "Loadout Roulette | Input block unavailable"
+            LogEvent("Loadout Roulette will run without input blocking")
         }
     } else if p.Action = "Change Mouse Sensitivity" {
-        try ApplyMouseSensitivity(Effect)
+        try StartRawSensitivity(Effect)
         catch as err {
             BlockEffect(err.Message, now)
             return false
@@ -565,7 +574,7 @@ AdvanceOneEffect(now) {
             if Effect.Step = 0 {
                 Effect.InventoryKey := InventorySwapKey()
                 if Pulse(Effect.InventoryKey, now, 110) {
-                    Effect.Note := "Opening inventory"
+                    Effect.Note := Effect.HasOwnProp("InputLockUnavailable") ? "Opening inventory | input lock unavailable" : "Opening inventory"
                     Effect.Step := 1
                     Effect.Next := now + 1150
                 } else
@@ -749,8 +758,8 @@ FinishEffect(reason := "") {
             GameKeyOwners.Delete(key)
     }
     try RestoreEffectClipboard(Effect)
-    try RestoreMouseSensitivity(Effect)
-    try ReleaseInputLock(Effect)
+    try StopRawSensitivity(Effect)
+    try EndGameplayInputLock(Effect)
     if Effect.VisualFile != "" {
         try WriteAtomic(Effect.VisualFile ".cancel", "cancel")
         if Effect.VisualPid {
@@ -798,25 +807,6 @@ EffectsConflict(a, b) {
         || a = "Alt+Enter" && b = "Random Loadout" || b = "Alt+Enter" && a = "Random Loadout"
 }
 
-AcquireInputLock(item) {
-    global InputLockOwners
-    if !InputLockOwners.Count && !DllCall("user32\BlockInput", "Int", 1, "Int")
-        return false
-    InputLockOwners[item] := true
-    item.InputLock := true
-    return true
-}
-
-ReleaseInputLock(item) {
-    global InputLockOwners
-    if !item.InputLock
-        return
-    if InputLockOwners.Count = 1 && !DllCall("user32\BlockInput", "Int", 0, "Int")
-        LogEvent("Windows input block was already released or could not release (" A_LastError ")")
-    InputLockOwners.Delete(item)
-    item.InputLock := false
-}
-
 SendLockedInput(key, down) {
     static buttons := Map("lbutton", [0x2, 0x4, 0], "rbutton", [0x8, 0x10, 0],
         "mbutton", [0x20, 0x40, 0], "xbutton1", [0x80, 0x100, 1], "xbutton2", [0x80, 0x100, 2],
@@ -837,23 +827,6 @@ SendLockedInput(key, down) {
     }
     if DllCall("user32\SendInput", "UInt", 1, "Ptr", event, "Int", event.Size, "UInt") != 1
         throw Error("Windows did not send " key)
-}
-
-ApplyMouseSensitivity(item) {
-    current := 0
-    if !DllCall("user32\SystemParametersInfoW", "UInt", 0x70, "UInt", 0, "UInt*", &current, "UInt", 0, "Int")
-        throw Error("Windows mouse sensitivity is unavailable")
-    multiplier := PunishmentVaries(item.P) ? (Random(0, 1) ? 3.0 : 0.25) : Max(0.1, Min(5, item.P.Value))
-    speed := Max(1, Min(20, Round(current * multiplier)))
-    if !DllCall("user32\SystemParametersInfoW", "UInt", 0x71, "UInt", 0, "Ptr", speed, "UInt", 0, "Int")
-        throw Error("Windows mouse sensitivity could not change")
-    item.Sensitivity := current
-    item.Note := (multiplier > 1 ? "High" : multiplier < 1 ? "Low" : "Normal") "  " multiplier "x"
-}
-
-RestoreMouseSensitivity(item) {
-    if item.Sensitivity
-        DllCall("user32\SystemParametersInfoW", "UInt", 0x71, "UInt", 0, "Ptr", item.Sensitivity, "UInt", 0, "Int")
 }
 
 GamePermissionProblem(hwnd) {

@@ -116,9 +116,7 @@ RecorderTick(now) {
         ih.OnKeyDown := RecordKeyDown
         ih.OnKeyUp := RecordKeyUp
         Recorder.Hook := ih
-        rid := Buffer(8 + A_PtrSize, 0)
-        NumPut("UShort", 1, "UShort", 2, "UInt", 0x100, "Ptr", AppGui.Hwnd, rid)
-        if !DllCall("user32\RegisterRawInputDevices", "Ptr", rid, "UInt", 1, "UInt", rid.Size) {
+        if !SetRawMouseSink(AppGui.Hwnd) {
             StopRecording()
             RecorderStatus("Mouse capture could not start · " A_LastError)
             return
@@ -251,9 +249,7 @@ StopRecording(*) {
     if IsObject(Recorder.Hook)
         try Recorder.Hook.Stop()
     Recorder.Hook := 0
-    rid := Buffer(8 + A_PtrSize, 0)
-    NumPut("UShort", 1, "UShort", 2, "UInt", 1, "Ptr", 0, rid)
-    DllCall("user32\RegisterRawInputDevices", "Ptr", rid, "UInt", 1, "UInt", rid.Size)
+    SetRawMouseSink()
     if oldPhase = "recording" {
         for key in Recorder.Down
             Recorder.Events.Push({At: Min(60000, NowMs() - Recorder.Start), Kind: "up", Key: key, X: 0, Y: 0})

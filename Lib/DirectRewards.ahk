@@ -1,5 +1,5 @@
 ﻿BuildDirectSettings(gui) {
-    global DirectSlotControls, DirectBypassCooldown, DirectCooldownCheck
+    global DirectSlotControls, DirectBypassCooldown, DirectCooldownCheck, DirectSaveStatus
     DirectCooldownCheck := gui.AddCheckbox("x442 y301 w324 h28", "Direct redeems bypass cooldown")
     DirectCooldownCheck.Value := DirectBypassCooldown
     gui.SetFont("s10 Bold cF4EDF9", "Segoe UI")
@@ -10,7 +10,33 @@
         x := A_Index <= 3 ? 40 : 420
         y := 378 + (A_Index <= 3 ? A_Index - 1 : A_Index - 4) * 39
         gui.AddText("x" x " y" y + 4 " w59 h23", "Slot " A_Index)
-        DirectSlotControls.Push(gui.AddDropDownList("x" x + 62 " y" y " w276"))
+        DirectSlotControls.Push(gui.AddDropDownList("x" x + 62 " y" y " w191"))
+        copy := gui.AddButton("x" x + 259 " y" y " w78 h25", "Copy args")
+        copy.OnEvent("Click", CopyDirectArguments.Bind(A_Index))
+    }
+    save := gui.AddButton("x420 y456 w140 h27", "Save redeems")
+    save.OnEvent("Click", SaveDirectFromUi)
+    DirectSaveStatus := gui.AddText("x572 y460 w198 h23 cD3B7F3", "")
+}
+
+DirectArguments(slot, script) {
+    return "//B //NoLogo " Chr(34) script Chr(34) " --direct " slot " %userName%"
+}
+
+CopyDirectArguments(slot, *) {
+    global DirectSaveStatus
+    A_Clipboard := DirectArguments(slot, A_ScriptDir "\Meso_Wheel_Trigger.vbs")
+    SetText(DirectSaveStatus, "Slot " slot " arguments copied")
+}
+
+SaveDirectFromUi(*) {
+    global DirectSaveStatus
+    try {
+        SaveDirectSettings()
+        SetText(DirectSaveStatus, "Saved")
+    } catch as err {
+        SetText(DirectSaveStatus, "Could not save redeems")
+        LogEvent("Direct redeem save failed: " err.Message)
     }
 }
 

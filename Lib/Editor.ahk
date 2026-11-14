@@ -309,7 +309,7 @@ OpenSettings(*) {
     SettingsGui.SetFont("s9 Norm cB5A5C9", "Segoe UI")
     SettingsGui.AddText("x27 y56 w240 h20", "MESO CONTROL")
     SettingsGui.SetFont("s10 Norm cEDE7F7", "Segoe UI")
-    tab := SettingsGui.AddTab3("x20 y88 w784 h555", ["Punishments", "Activities", "Audio", "Stream", "Display", "Sequence", "Rounds", "Chat", "Updates", "Shared Keybinds"])
+    tab := SettingsGui.AddTab3("x20 y88 w784 h555", ["Punishments", "Activities", "Audio", "Stream", "Display", "Sequence", "Rounds", "Chat", "Updates", "Keybinds"])
     tab.UseTab(1)
     SettingsGui.SetFont("s9 cD3C5E4", "Segoe UI")
     SettingsGui.AddText("x35 y139 w70 h22", "PROFILE")

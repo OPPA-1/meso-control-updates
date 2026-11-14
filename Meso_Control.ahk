@@ -6,6 +6,7 @@
 #Include Lib\ActivityOptions.ahk
 #Include Lib\AltTab.ahk
 #Include Lib\Effects.ahk
+#Include Lib\GameplayInput.ahk
 #Include Lib\MacroCodec.ahk
 #Include Lib\Recorder.ahk
 #Include Lib\Editor.ahk
@@ -75,6 +76,8 @@ GameKeyOwners := Map()
 GameKeyOwners.CaseSense := "Off"
 ActiveEffects := []
 InputLockOwners := Map()
+GameplayLock := 0
+RawSensitivity := 0
 VisualHits := Map()
 ChatEffect := 0
 DirectPending := []
@@ -198,7 +201,7 @@ BuildMainWindow()
 InitUpdates()
 SetTimer(RefreshUpdateStatus, 350)
 OnMessage(0x4A, ReceiveMesoCommand)
-OnMessage(0xFF, RecordRawMouse)
+OnMessage(0xFF, ReceiveRawMouse)
 WheelRelayInitialize()
 SetTimer(ReadWheelRelay, 75)
 SetTimer(ReadChatRelay, 65)
@@ -330,6 +333,8 @@ BuildMainWindow() {
     A_TrayMenu.Add("Open Meso Control", ShowApp)
     A_TrayMenu.Add("Stream output", (*) => OpenStreamOutput(true))
     A_TrayMenu.Add("Emergency stop", EmergencyStop)
+    if !A_IsAdmin
+        A_TrayMenu.Add("Run as administrator", RestartElevated)
     A_TrayMenu.Add("Refresh", RefreshApp)
     A_TrayMenu.Add("Exit", (*) => ExitApp())
     A_TrayMenu.Default := "Open Meso Control"
@@ -1272,4 +1277,24 @@ Shutdown(reason, code) {
         try SavePending()
     CloseStreamOutput()
     try FileDelete(RuntimeDir "\controller.info")
+}
+
+ReceiveRawMouse(wParam, lParam, msg, hwnd) {
+    global Recorder
+    if Recorder.Phase = "recording"
+        return RecordRawMouse(wParam, lParam, msg, hwnd)
+    ProcessRawSensitivity(wParam, lParam, msg, hwnd)
+}
+
+RestartElevated(*) {
+    global Queue, OutputEnabled
+    if HasEffects() || IsObject(Queue.Active) {
+        MsgBox("Finish the active punishment first.", "Meso Control")
+        return
+    }
+    try {
+        Run("*RunAs " UpdateQuote(A_AhkPath) " " UpdateQuote(A_ScriptFullPath) (OutputEnabled ? " --restore-output" : ""), A_ScriptDir)
+    } catch as err {
+        LogEvent("Administrator restart did not start: " err.Message)
+    }
 }

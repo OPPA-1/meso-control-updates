@@ -207,7 +207,7 @@ jobs:
           python - "$zip" 63009c1f588aa1d9a03a013f8bb7665ba8e42acd66002f02d9e69b32c38de734 <<'PY'
           import base64, hashlib, re, sys, zipfile
           with zipfile.ZipFile(sys.argv[1]) as z:
-              source = z.read("Lib/SonionRingtone.ahk").decode()
+              source = z.read("Lib/SonionRingtone.ahk").decode("utf-8-sig").replace("\r\n", "\n")
           chunks = re.findall(r'(?m)^\s*data \.= "([A-Za-z0-9+/=]+)"$', source)
           sound = base64.b64decode("".join(chunks), validate=True)
           if hashlib.sha256(sound).hexdigest() != sys.argv[2]:

@@ -1,0 +1,15 @@
+name: Hold the pending Sonion update
+on:
+  push:
+    branches: ['release/6.0.8']
+    paths: ['.github/workflows/stop-608-publish.yml']
+permissions:
+  actions: write
+jobs:
+  cancel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel the earlier build while awaiting the ringtone
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method POST "repos/$GITHUB_REPOSITORY/actions/runs/43968241791/cancel"

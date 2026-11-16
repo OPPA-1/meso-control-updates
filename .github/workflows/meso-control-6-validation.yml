@@ -79,6 +79,14 @@ jobs:
             if (Test-Path $entry) { $source = $entry }
             Copy-Item -LiteralPath $source -Destination (Join-Path $app $entry) -Force
           }
+      - name: Report Windows audio endpoint availability
+        shell: powershell
+        run: |
+          Add-Type -Namespace Meso -Name AudioProbe -MemberDefinition @'
+          [System.Runtime.InteropServices.DllImport("winmm.dll")]
+          public static extern uint waveOutGetNumDevs();
+          '@
+          Write-Host "Wave output devices: $([Meso.AudioProbe]::waveOutGetNumDevs())"
       - name: Check Raw Accel integration
         shell: powershell
         run: |
@@ -169,6 +177,8 @@ jobs:
             gh release edit 6.0.4 --draft=false --latest
           fi
       - name: Verify public updater downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -176,7 +186,7 @@ jobs:
           mkdir downloaded
           cd downloaded
           for attempt in 1 2 3 4 5; do
-            if curl --fail --silent --show-error "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest" -o release.json &&
+            if gh api "repos/$GITHUB_REPOSITORY/releases/latest" > release.json &&
               jq -e '.tag_name == "6.0.4" and (.draft | not) and (.prerelease | not)' release.json >/dev/null; then
               break
             fi

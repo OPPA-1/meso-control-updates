@@ -264,7 +264,7 @@ TestSonionWindows() {
         ShowSonionGlitch(Sonion, now)
         Check(GuiHwndSafe(Sonion.Panel) && Sonion.Next = now + 33, "Glitch overlay draws a frame and schedules the next one")
         CloseSonionWindows(Sonion)
-        ShowSonionScare(Sonion)
+        ShowSonionScare(Sonion, A_ScriptDir "\..\Ui\sonion_jeff.png")
         Check(GuiHwndSafe(Sonion.Panel), "Jeff overlay opens with the packaged image")
     } finally {
         StopSonion()

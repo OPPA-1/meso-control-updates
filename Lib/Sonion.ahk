@@ -4,7 +4,7 @@
 
 ScheduleSonion(target, now) {
     global Sonion
-    if !IsObject(Sonion)
+    if !IsSet(Sonion) || !IsObject(Sonion)
         Sonion := {Target: target, Phase: "reply", Next: now + 5000, Step: 0, Replies: 0, Dim: 0, Panel: 0, Sound: false}
 }
 
@@ -172,14 +172,16 @@ AnswerSonion(answer, *) {
     } finally Critical(previousCritical)
 }
 
-ShowSonionScare(call) {
+ShowSonionScare(call, imagePath := "") {
+    if imagePath = ""
+        imagePath := A_ScriptDir "\Ui\sonion_jeff.png"
     b := SonionBounds(call)
     g := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000020 -DPIScale", "Sonion")
     call.Panel := g
     g.BackColor := "08050C"
     w := Min(b.W, Round(b.H * 1.765))
     h := Round(w / 1.765)
-    g.AddPicture("x" (b.W - w)//2 " y" (b.H - h)//2 " w" w " h" h, A_ScriptDir "\Ui\sonion_jeff.png")
+    g.AddPicture("x" (b.W - w)//2 " y" (b.H - h)//2 " w" w " h" h, imagePath)
     g.Show("NA x" b.X " y" b.Y " w" b.W " h" b.H)
 }
 

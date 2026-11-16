@@ -1,73 +1,22 @@
-name: Verify Sonion portrait source
+name: Store verified Sonion portrait
 on:
   push:
     branches: ['release/6.0.6']
 permissions:
-  contents: read
+  contents: write
 jobs:
   portrait:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - name: Inspect the supplied Imgur album
+      - name: Record the exact PNG in the release repository
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          python -m pip -q install pillow
-          python - <<'PY'
-          import base64, hashlib, html, io, json, os, re, urllib.request, urllib.parse
-          from concurrent.futures import ThreadPoolExecutor
-          from PIL import Image
-          album = "https://imgur.com/a/X8n6FZu"
-          urls = [album, album + "/embed", "https://api.imgur.com/oembed.json?url=" + urllib.parse.quote(album, safe=""),
-                  "https://api.imgur.com/post/v1/albums/X8n6FZu?client_id=546c25a59c58ad7&include=media",
-                  "https://i.imgur.com/X8n6FZu.png"]
-          headers = {"User-Agent": "Mozilla/5.0", "Accept": "*/*"}
-          def fetch(url):
-              req = urllib.request.Request(url, headers=headers)
-              with urllib.request.urlopen(req, timeout=12) as r:
-                  return r.read(3_000_000), r.headers.get("Content-Type",""), r.geturl()
-          def candidates(url):
-              try:
-                  data, kind, end = fetch(url)
-                  print("Source", kind, len(data), end, flush=True)
-                  if kind.startswith("image/"):
-                      return [url]
-                  text = html.unescape(data.decode("utf-8","replace"))
-                  text = text.replace("\\/", "/").replace(r"\u002F", "/").replace(r"\u002f", "/")
-                  hits = set(re.findall(r"(?:https?:)?//i[.]imgur[.]com/[a-zA-Z0-9]+(?:[.](?:png|jpeg|jpg|webp|gif))?", text))
-                  print("Album image links", [x for x in sorted(hits)][:12], flush=True)
-                  if "json" in kind:
-                      try:
-                          val = json.loads(text)
-                          print("Album metadata keys", list(val.keys()) if isinstance(val, dict) else type(val).__name__, flush=True)
-                      except ValueError:
-                          pass
-                  return ["https:" + u if u.startswith("//") else u for u in hits]
-              except Exception as exc:
-                  print("Source unavailable", url, str(exc), flush=True)
-                  return []
-          with ThreadPoolExecutor(max_workers=5) as pool:
-              found = sorted(set(p for candidates_for_source in pool.map(candidates, urls) for p in candidates_for_source))
-          print("Portrait candidates", found[:20])
-          for url in found[:20]:
-              try:
-                  data, kind, result = fetch(url)
-                  im = Image.open(io.BytesIO(data))
-                  print("PORTRAIT_INFO=" + json.dumps({"url":result,"format":im.format,"width":im.width,"height":im.height,"size":len(data),"sha256":hashlib.sha256(data).hexdigest()}))
-                  im.thumbnail((180,180))
-                  thumb = io.BytesIO()
-                  im.convert("RGB").save(thumb, format="JPEG", quality=77)
-                  print("PORTRAIT_PREVIEW=" + base64.b64encode(thumb.getvalue()).decode())
-                  if im.size[0] > 100 and im.size[1] > 100 and len(data) < 350000:
-                      path = "portrait-" + re.sub(r"[^a-zA-Z0-9]+","-",urllib.parse.urlsplit(result).path).strip("-")
-                      os.makedirs("portrait-files", exist_ok=True)
-                      with open("portrait-files/" + path,"wb") as fd:
-                          fd.write(data)
-              except Exception as exc:
-                  print("Candidate unavailable", url, str(exc))
-          PY
-      - uses: actions/upload-artifact@v4
-        if: ${{ hashFiles('portrait-files/*') != '' }}
-        with:
-          name: inspected-imgur-portrait
-          path: portrait-files/
+          set -euo pipefail
+          curl -fLsS --retry 2 --retry-all-errors 'https://i.imgur.com/UBhriTZ.png' -o sonion.png
+          printf '%s  sonion.png\n' 'd50ada00f786930d5ed51e7ad00a64d1f876d57dc0781053fe6584d9eb93e4d9' | sha256sum -c -
+          python -c 'import base64, json; print(json.dumps({"encoding":"base64","content":base64.b64encode(open("sonion.png","rb").read()).decode()}))' > git-blob.json
+          sha=$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" --input git-blob.json --jq .sha)
+          printf 'SONION_BLOB=%s\n' "$sha"

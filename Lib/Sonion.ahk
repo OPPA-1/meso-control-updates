@@ -2,10 +2,50 @@
     return "When the onion rings... Do you answer?"
 }
 
-ScheduleSonion(target, now) {
+ScheduleSonion(target, now, stage := 0, transcript := 0) {
     global Sonion
-    if !IsSet(Sonion) || !IsObject(Sonion)
-        Sonion := {Target: target, Phase: "reply", Next: now + 5000, Step: 0, Replies: 0, Dim: 0, Panel: 0, Sound: false}
+    if IsSet(Sonion) && IsObject(Sonion) {
+        if IsObject(stage) || !Sonion.Preview
+            return
+        StopSonion()
+    }
+    Sonion := {Target: target, Phase: "reply", Next: now + 5000, Step: 0, Replies: 0, Dim: 0, Panel: 0, Sound: false,
+        Preview: IsObject(stage), Stage: stage, Transcript: transcript}
+}
+
+StartSonionPreview(owner, now) {
+    global Sonion
+    previousCritical := A_IsCritical
+    Critical("On")
+    stage := 0
+    try {
+        if IsObject(Sonion) && !Sonion.Preview
+            return false
+        StopSonionPreview()
+        stage := Gui("+Owner" owner " -MinimizeBox -MaximizeBox -DPIScale", "Sonion Call | Test")
+        stage.BackColor := "160F20"
+        stage.SetFont("s10 Bold cD7B8F8", "Segoe UI")
+        stage.AddText("x34 y27 w566 h25", "SONION CALL TEST")
+        stage.SetFont("s16 Norm cFAF0FF", "Segoe UI")
+        transcript := stage.AddText("x35 y100 w721 h200 BackgroundTrans", SonionQuestion())
+        stage.SetFont("s10 Norm", "Segoe UI")
+        stage.AddButton("x670 y22 w99 h34", "Stop").OnEvent("Click", StopSonionPreview)
+        stage.OnEvent("Escape", StopSonionPreview)
+        stage.OnEvent("Close", StopSonionPreview)
+        stage.Show("w802 h576")
+        ScheduleSonion(stage.Hwnd, now, stage, transcript)
+        return true
+    } catch as err {
+        if GuiHwndSafe(stage)
+            stage.Destroy()
+        throw err
+    } finally Critical(previousCritical)
+}
+
+StopSonionPreview(*) {
+    global Sonion
+    if IsSet(Sonion) && IsObject(Sonion) && Sonion.Preview
+        StopSonion()
 }
 
 AdvanceSonion(now) {
@@ -13,7 +53,7 @@ AdvanceSonion(now) {
     if !IsSet(Sonion) || !IsObject(Sonion)
         return
     call := Sonion
-    if !WinActive("ahk_id " call.Target) {
+    if call.Preview ? !GuiHwndSafe(call.Stage) : !WinActive("ahk_id " call.Target) {
         StopSonion()
         return
     }
@@ -21,10 +61,12 @@ AdvanceSonion(now) {
         return
     switch call.Phase {
         case "reply":
-            if !InputLockOwners.Count
+            if call.Preview
+                AdvanceSonionPreviewReply(call, now)
+            else if !InputLockOwners.Count
                 AdvanceSonionReply(call, now)
         case "waiting":
-            if !InputLockOwners.Count
+            if call.Preview || !InputLockOwners.Count
                 ShowSonionPhone(call, now)
         case "ringing":
             if now >= call.Deadline {
@@ -47,6 +89,16 @@ AdvanceSonion(now) {
             else
                 UpdateSonionGlitch(call, now)
     }
+}
+
+AdvanceSonionPreviewReply(call, now) {
+    call.Replies += 1
+    call.Transcript.Text .= "`nyes"
+    if call.Replies = 3 {
+        call.Phase := "waiting"
+        call.Next := now + 900
+    } else
+        call.Next := now + 510
 }
 
 AdvanceSonionReply(call, now) {
@@ -120,7 +172,7 @@ ShowSonionPhone(call, now) {
 
 ShakeSonionPhone(call, now) {
     global InputLockOwners
-    if !InputLockOwners.Count {
+    if !call.Preview && !InputLockOwners.Count {
         clip := Buffer(16, 0), screen := Buffer(16, 0)
         left := SysGet(76), top := SysGet(77)
         NumPut("Int", left, "Int", top, "Int", left + SysGet(78), "Int", top + SysGet(79), screen)
@@ -147,12 +199,13 @@ AnswerSonion(answer, *) {
     Critical("On")
     try {
         call := Sonion
-        if !WinActive("ahk_id " call.Target) && !WinActive("ahk_id " GuiHwndSafe(call.Panel)) {
-            StopSonion()
-            return
-        }
-        if !WinActive("ahk_id " call.Target)
+        if !call.Preview && !WinActive("ahk_id " call.Target) {
+            if !WinActive("ahk_id " GuiHwndSafe(call.Panel)) {
+                StopSonion()
+                return
+            }
             try WinActivate("ahk_id " call.Target)
+        }
         CloseSonionWindows(call)
         now := NowMs()
         if answer {
@@ -160,11 +213,15 @@ AnswerSonion(answer, *) {
             call.Next := now
             call.HideAt := now + 3200
             call.Deadline := now + 12000
+            if call.Preview
+                call.Transcript.Text := "Answered"
             PlaySonionSound(call, "321.wav")
             ShowSonionScare(call)
         } else {
             call.Phase := "declined"
             call.Next := now + 5000
+            if call.Preview
+                call.Transcript.Text := "Declined. Glitch starts in five seconds."
         }
     } catch as err {
         LogEvent("Sonion response: " err.Message)
@@ -173,8 +230,10 @@ AnswerSonion(answer, *) {
 }
 
 ShowSonionScare(call, imagePath := "") {
-    if imagePath = ""
-        imagePath := A_ScriptDir "\Ui\sonion_jeff.png"
+    if imagePath = "" {
+        SplitPath(A_LineFile,, &scriptFolder)
+        imagePath := scriptFolder "\..\Ui\sonion_jeff.png"
+    }
     b := SonionBounds(call)
     g := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000020 -DPIScale", "Sonion")
     call.Panel := g
@@ -186,10 +245,21 @@ ShowSonionScare(call, imagePath := "") {
 }
 
 StartSonionGlitch(call, now) {
-    global ActiveEffects, Clock, SonionGlitchId
     call.Phase := "glitch"
     call.Start := now
     call.Deadline := now + 7000
+    if call.Preview
+        call.Transcript.Text := "Glitch"
+    else
+        StartSonionPunishments(call, now)
+    PlaySonionSound(call, "glitch.mp3")
+    ShowSonionGlitch(call, now)
+    if !call.Preview
+        PublishState(true)
+}
+
+StartSonionPunishments(call, now) {
+    global ActiveEffects, Clock, SonionGlitchId
     call.Id := NewId()
     SonionGlitchId := call.Id
     selected := []
@@ -203,9 +273,6 @@ StartSonionGlitch(call, now) {
         selected.Push(candidate)
         StartEffect(candidate, false, now, call.Id)
     }
-    PlaySonionSound(call, "glitch.mp3")
-    ShowSonionGlitch(call, now)
-    PublishState(true)
 }
 
 SonionGlitchRoom(count) {
@@ -276,6 +343,8 @@ StopSonion() {
     }
     if call.Sound
         DllCall("winmm\mciSendStringW", "WStr", "close mesosonion", "Ptr", 0, "UInt", 0, "Ptr", 0)
+    if GuiHwndSafe(call.Stage)
+        try call.Stage.Destroy()
 }
 
 SonionMediaFile(dir, name) {

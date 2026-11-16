@@ -436,12 +436,7 @@ OpenSettings(*) {
     SettingsGuideCheck.Enabled := OutputEnabled
     SettingsGuideCheck.OnEvent("Click", ToggleSettingsGuides)
     tab.UseTab(6)
-    SettingsGui.SetFont("s13 Bold cF4EDF9", "Segoe UI")
-    SettingsGui.AddText("x40 y137 w640 h35", "SEQUENCE")
-    b := SettingsGui.AddButton("x40 y222 w224 h43", "Play sequence")
-    b.OnEvent("Click", TestSequence)
-    b := SettingsGui.AddButton("x276 y222 w224 h43", "Stop")
-    b.OnEvent("Click", StopSequence)
+    BuildSequenceSettings(SettingsGui)
     tab.UseTab(7)
     BuildRoundSettings(SettingsGui)
     tab.UseTab(8)
@@ -485,17 +480,39 @@ ToggleSettingsGuides(*) {
     ToggleGuides()
 }
 
-TestSequence(*) {
-    global SettingsGui
-    SaveSoundSettings(false)
-    OpenStreamOutput(false)
-    ScheduleHorror(NowMs() + 1600)
-    if GuiHwndSafe(SettingsGui)
-        SettingsGui.Hide()
+BuildSequenceSettings(gui) {
+    gui.SetFont("s13 Bold cF4EDF9", "Segoe UI")
+    gui.AddText("x40 y137 w640 h35", "SEQUENCE")
+    gui.SetFont("s10 Norm cEDE7F7", "Segoe UI")
+    choice := gui.AddDropDownList("x40 y177 w314 Choose1 vSequenceChoice", ["He Is Coming", "Sonion Call"])
+    notice := gui.AddText("x40 y278 w640 h27 cCDB6E3 vSequenceNotice", "")
+    gui.AddButton("x40 y222 w184 h43", "Test sequence").OnEvent("Click", TestSequence.Bind(choice, notice))
+    gui.AddButton("x236 y222 w118 h43", "Stop").OnEvent("Click", (*) => (StopSequence(), SetText(notice, "")))
+}
+
+TestSequence(choice, notice, *) {
+    if !GuiHwndSafe(choice.Gui)
+        return
+    try {
+        SetText(notice, "")
+        if choice.Value = 2 {
+            if !StartSonionPreview(choice.Gui.Hwnd, NowMs())
+                SetText(notice, "A Sonion call is already running.")
+        } else {
+            StopSonionPreview()
+            SaveSoundSettings(false)
+            OpenStreamOutput(false)
+            ScheduleHorror(NowMs() + 1600)
+        }
+    } catch as err {
+        SetText(notice, "The sequence could not start. See Meso.log.")
+        LogEvent("Sequence test failed: " err.Message)
+    }
 }
 
 StopSequence(*) {
     global HorrorEvents, OutputPid
+    StopSonionPreview()
     HorrorEvents := []
     PublishState(true)
     h := StreamOutputWindow(OutputPid)

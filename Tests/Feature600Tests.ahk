@@ -106,6 +106,7 @@ try {
     TestVbsRewards()
     TestGameplayInput()
     TestFeature603(p1, p2)
+    TestSequencePicker()
     Check(DirectArguments(5, 'C:\Meso Control\Meso_Wheel_Trigger.vbs') = '//B //NoLogo "C:\Meso Control\Meso_Wheel_Trigger.vbs" --direct 5 %userName%', "Copied Streamer.bot arguments preserve the quoted path")
     state := Line("meta", 1, 1, 2000) Line("status", 0, 0, 0) Line("wheel", "idle", "", 0, 0, "", 0, 0)
     state .= Line("slots", "idle", "", 0, 0, 0, 0, 0, "", "", "", "") Line("timer", "idle", 0, 0, 0)
@@ -116,7 +117,7 @@ try {
     Check(OutputPanelKeys(parsed, 2600)[1] != OutputPanelKeys(parsed, 2650)[1], "Glitch animation refreshes the wheel panel")
     Check(parsed.ActiveItems.Length = 2, "Both effects reach the OBS state")
     Check(OutputPanelKeys(parsed, 3100)[3] != "idle", "Second OBS effect outlasts first")
-    FileAppend("PASS " checks " Meso Control 6.0.3 checks`n", "*")
+    FileAppend("PASS " checks " Meso Control 6.0.4 checks`n", "*")
 } catch as err {
     FileAppend("FAIL: " err.Message " (" err.File ":" err.Line ")`n", "*")
     ExitApp(1)
@@ -270,6 +271,88 @@ TestSonionWindows() {
         StopSonion()
         game.Destroy()
     }
+}
+
+TestSequencePicker() {
+    global Sonion, ActiveEffects, SequenceTestHorrorDue, SequenceTestOutputOpened, HorrorEvents, OutputPid
+    global TickPathEdit, LandPathEdit, TickSlider, LandSlider, SlotTickPathEdit, SlotLandPathEdit, SlotTickSlider, SlotLandSlider
+    global SequenceSlider, TtsSlider, AnnouncementSlider, SpeakCheck, ViewerCheck
+    settings := Gui(, "Meso sequence picker test")
+    BuildSequenceSettings(settings)
+    settings.Show("w824 h362")
+    selector := settings["SequenceChoice"], notice := settings["SequenceNotice"]
+    try {
+        TickPathEdit := LandPathEdit := SlotTickPathEdit := SlotLandPathEdit := {Value: ""}
+        TickSlider := LandSlider := SlotTickSlider := SlotLandSlider := SequenceSlider := TtsSlider := AnnouncementSlider := {Value: 75}
+        SpeakCheck := ViewerCheck := {Value: 0}
+        SequenceTestHorrorDue := 0, SequenceTestOutputOpened := false
+        HorrorEvents := [], OutputPid := 0
+        Check(selector.Text = "He Is Coming", "The Sequence tab selects the original sequence by default")
+        ClickSequenceButton("Test sequence", settings.Hwnd, (*) => SequenceTestHorrorDue > 0)
+        Check(SequenceTestOutputOpened && SequenceTestHorrorDue > NowMs(), "The original sequence test enables output and schedules playback")
+        selector.Choose(2)
+        Check(selector.Text = "Sonion Call", "The Sequence tab offers Sonion Call")
+        ClickSequenceButton("Test sequence", settings.Hwnd, (*) => IsObject(Sonion))
+        Check(Sonion.Preview && GuiHwndSafe(Sonion.Stage), "Testing Sonion opens the stand-alone preview")
+        call := Sonion
+        Check(call.Transcript.Text = SonionQuestion() && call.Replies = 0, "Preview starts with the Sonion chat prompt")
+        clipboard := DllCall("user32\GetClipboardSequenceNumber", "UInt")
+        loop 3
+            AdvanceSonion(call.Next)
+        Check(call.Replies = 3 && call.Transcript.Text = SonionQuestion() "`nyes`nyes`nyes", "Preview shows all three replies")
+        Check(!call.HasOwnProp("Clipboard") && DllCall("user32\GetClipboardSequenceNumber", "UInt") = clipboard, "Preview leaves the clipboard alone")
+        AdvanceSonion(call.Next)
+        ClickSequenceButton("Button2", call.Panel.Hwnd, (*) => call.Phase = "answered")
+        Check(call.Phase = "answered" && GuiHwndSafe(call.Panel), "Answering the test call shows the Jeff overlay")
+        ClickSequenceButton("Stop", call.Stage.Hwnd, (*) => !IsObject(Sonion))
+        Check(!GuiHwndSafe(call.Stage) && !GuiHwndSafe(call.Panel), "Stop closes preview windows during the scare")
+        ClickSequenceButton("Test sequence", settings.Hwnd, (*) => IsObject(Sonion))
+        call := Sonion
+        loop 4
+            AdvanceSonion(call.Next)
+        ClickSequenceButton("Button1", call.Panel.Hwnd, (*) => call.Phase = "declined")
+        Check(call.Phase = "declined" && !GuiHwndSafe(call.Panel), "Declining closes the ringing preview")
+        count := ActiveEffects.Length
+        AdvanceSonion(call.Next - 1)
+        Check(call.Phase = "declined", "The preview respects the five-second delay after decline")
+        AdvanceSonion(call.Next)
+        Check(call.Phase = "glitch" && GuiHwndSafe(call.Panel) && ActiveEffects.Length = count, "Decline runs the glitch preview without any live punishments")
+        AdvanceSonion(call.Deadline)
+        Check(!IsObject(Sonion) && !GuiHwndSafe(call.Stage), "The finished preview cleans up its windows")
+        TestSequence(selector, notice)
+        preview := Sonion.Stage
+        ScheduleSonion(1, NowMs())
+        Check(!Sonion.Preview && !GuiHwndSafe(preview), "A live call takes priority over the stand-alone preview")
+        TestSequence(selector, notice)
+        Check(!Sonion.Preview && notice.Text != "", "Testing cannot replace a live Sonion call")
+    } finally {
+        StopSonion()
+        settings.Destroy()
+    }
+}
+
+ClickSequenceButton(control, hwnd, done) {
+    ControlClick(control, "ahk_id " hwnd,, "Left", 1, "NA")
+    deadline := NowMs() + 1250
+    while !done() && NowMs() < deadline
+        Sleep(15)
+}
+
+OpenStreamOutput(focus := true) {
+    global SequenceTestOutputOpened
+    SequenceTestOutputOpened := true
+}
+
+ScheduleHorror(due) {
+    global SequenceTestHorrorDue
+    SequenceTestHorrorDue := due
+}
+
+SaveAppSettings() {
+}
+
+SetText(control, value) {
+    control.Text := value
 }
 
 TestInputHooks() {

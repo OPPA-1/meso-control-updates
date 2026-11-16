@@ -1137,7 +1137,7 @@ PublishState(force := false) {
             body .= Line("bonus", j.Bonus.Name, j.BonusStart)
     } else
         body .= Line("wheel", "idle", "", 0, 0, "", 0, 0, "", ViewerVisible ? 1 : 0, WheelDisplayMode, TtsEnabled ? 1 : 0)
-    if IsObject(Sonion) && Sonion.Phase = "glitch"
+    if IsObject(Sonion) && !Sonion.Preview && Sonion.Phase = "glitch"
         body .= Line("glitch", Sonion.Start, Sonion.Deadline)
     body .= Line("slots", Slots.Phase, Slots.Id, Slots.Start, Slots.Mode, Slots.Reel, Slots.Locked, Slots.HoldUntil, Slots.Values*)
     for i, pool in Slots.Pools

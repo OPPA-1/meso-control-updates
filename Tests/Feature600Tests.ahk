@@ -289,11 +289,11 @@ TestSequencePicker() {
         HorrorEvents := [], OutputPid := 0
         Check(selector.Text = "He Is Coming", "The Sequence tab selects the original sequence by default")
         ClickSequenceButton("Test sequence", settings.Hwnd, (*) => SequenceTestHorrorDue > 0)
-        Check(SequenceTestOutputOpened && SequenceTestHorrorDue > NowMs(), "The original sequence test enables output and schedules playback")
+        Check(SequenceTestOutputOpened && SequenceTestHorrorDue > NowMs(), "The original sequence test enables output and schedules playback. Status: " notice.Text)
         selector.Choose(2)
         Check(selector.Text = "Sonion Call", "The Sequence tab offers Sonion Call")
         ClickSequenceButton("Test sequence", settings.Hwnd, (*) => IsObject(Sonion))
-        Check(Sonion.Preview && GuiHwndSafe(Sonion.Stage), "Testing Sonion opens the stand-alone preview")
+        Check(IsObject(Sonion) && Sonion.Preview && GuiHwndSafe(Sonion.Stage), "Testing Sonion opens the stand-alone preview. Status: " notice.Text)
         call := Sonion
         Check(call.Transcript.Text = SonionQuestion() && call.Replies = 0, "Preview starts with the Sonion chat prompt")
         clipboard := DllCall("user32\GetClipboardSequenceNumber", "UInt")
@@ -328,11 +328,20 @@ TestSequencePicker() {
     } finally {
         StopSonion()
         settings.Destroy()
+        log := A_ScriptDir "\runtime\Meso.log"
+        if FileExist(log) {
+            for row in StrSplit(FileRead(log, "UTF-8"), "`n")
+                if RegExMatch(row, "Sequence test failed|Sonion (audio|response)")
+                    FileAppend(row "`n", "*")
+        }
     }
 }
 
 ClickSequenceButton(control, hwnd, done) {
-    ControlClick(control, "ahk_id " hwnd,, "Left", 1, "NA")
+    button := ControlGetHwnd(control, "ahk_id " hwnd)
+    id := DllCall("user32\GetDlgCtrlID", "Ptr", button, "Int")
+    ; Send the button's standard click notification without requiring a focused desktop.
+    DllCall("user32\PostMessageW", "Ptr", hwnd, "UInt", 0x111, "UPtr", id, "Ptr", button)
     deadline := NowMs() + 1250
     while !done() && NowMs() < deadline
         Sleep(15)

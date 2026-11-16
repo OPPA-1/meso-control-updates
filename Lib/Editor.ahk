@@ -491,9 +491,9 @@ BuildSequenceSettings(gui) {
 }
 
 TestSequence(choice, notice, *) {
-    if !GuiHwndSafe(choice.Gui)
-        return
     try {
+        if !GuiHwndSafe(choice.Gui)
+            return
         SetText(notice, "")
         if choice.Value = 2 {
             if !StartSonionPreview(choice.Gui.Hwnd, NowMs())

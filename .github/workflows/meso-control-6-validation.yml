@@ -17,11 +17,7 @@ jobs:
           import base64, io, urllib.request
           from PIL import Image
           from concurrent.futures import ThreadPoolExecutor
-          urls = [
-              "https://i.kym-cdn.com/photos/images/newsfeed/003/244/739/489.jpeg",
-              "https://media1.tenor.com/m/j2UGK2hMMaYAAAAd/sonion-ring.gif",
-              "https://media1.tenor.com/m/j2UGK2hMMaYAAAAd/sonion-ring.jpg",
-          ]
+          urls = ["https://media1.tenor.com/m/KahFad6pbbsAAAAd/son.gif","https://media1.tenor.com/m/JHqDxZx0rGYAAAAd/sonion-ring-sona.gif","https://media1.tenor.com/m/y8qV65cJ33gAAAAd/son-sonion.gif","https://media1.tenor.com/m/I13_hvT0954AAAAd/onion-ring-onion.gif","https://media1.tenor.com/m/B3cWDDEKMFQAAAAd/son-sonion.gif"]
           def get(pair):
               i, url = pair
               try:

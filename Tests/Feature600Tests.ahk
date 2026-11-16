@@ -118,7 +118,7 @@ try {
     Check(OutputPanelKeys(parsed, 2600)[1] != OutputPanelKeys(parsed, 2650)[1], "Glitch animation refreshes the wheel panel")
     Check(parsed.ActiveItems.Length = 2, "Both effects reach the OBS state")
     Check(OutputPanelKeys(parsed, 3100)[3] != "idle", "Second OBS effect outlasts first")
-    FileAppend("PASS " checks " Meso Control 6.0.5 checks`n", "*")
+    FileAppend("PASS " checks " Meso Control feature checks`n", "*")
 } catch as err {
     FileAppend("FAIL: " err.Message " (" err.File ":" err.Line ")`n", "*")
     ExitApp(1)

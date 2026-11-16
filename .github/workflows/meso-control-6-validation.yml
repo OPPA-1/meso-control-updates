@@ -1,230 +1,73 @@
-name: Meso Control 6.0.5 Windows validation
-
+name: Verify Sonion portrait source
 on:
   push:
-    branches: ['release/6.0.5']
-    paths: ['version.ini', 'Lib/**', 'Tests/**', '.github/workflows/meso-control-6-validation.yml']
-  workflow_dispatch:
-
+    branches: ['release/6.0.6']
 permissions:
   contents: read
-
 jobs:
-  validate:
-    runs-on: windows-latest
-    timeout-minutes: 12
-    steps:
-      - uses: actions/checkout@v4
-      - name: Restore release baseline
-        shell: pwsh
-        run: |
-          $asset = 'Meso_Control_6_0_4_COMPLETE.zip'
-          $uri = 'https://github.com/OPPA-1/meso-control-updates/releases/download/6.0.4/' + $asset
-          Invoke-WebRequest $uri -OutFile "$env:RUNNER_TEMP/$asset"
-          $actual = (Get-FileHash "$env:RUNNER_TEMP/$asset" -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actual -ne '14477a4342ad2cec2c49e9a3247203855ed3752b4490eac8a9b3b21727d77606') { throw 'Baseline ZIP checksum mismatch' }
-          Expand-Archive "$env:RUNNER_TEMP/$asset" "$env:RUNNER_TEMP/meso-baseline"
-          Copy-Item "$env:RUNNER_TEMP/meso-baseline" "$env:RUNNER_TEMP/meso" -Recurse
-          foreach ($entry in @(git ls-files | Where-Object { $_ -match '^(Lib/|Tests/|Ui/sonion_(jeff|ring)\.png$|StreamerBot/|Meso_.*\.(ahk|vbs)$|version\.ini$)' })) {
-            $target = Join-Path "$env:RUNNER_TEMP/meso" $entry
-            New-Item -ItemType Directory -Force (Split-Path $target) | Out-Null
-            Copy-Item -LiteralPath $entry -Destination $target -Force
-          }
-      - name: Prepare the Sonion caller portrait
-        shell: powershell
-        run: |
-          Add-Type -AssemblyName System.Drawing
-          $source = Join-Path $env:GITHUB_WORKSPACE 'Ui/sonion_ring_default.jpg'
-          $dest = Join-Path $env:RUNNER_TEMP 'meso/Ui/sonion_ring_default.png'
-          $portrait = [System.Drawing.Image]::FromFile($source)
-          try { $portrait.Save($dest, [System.Drawing.Imaging.ImageFormat]::Png) } finally { $portrait.Dispose() }
-      - name: Validate with AutoHotkey
-        shell: pwsh
-        run: |
-          Invoke-WebRequest https://github.com/AutoHotkey/AutoHotkey/releases/download/v2.0.31/AutoHotkey_2.0.31.zip -OutFile "$env:RUNNER_TEMP/ahk.zip"
-          if ((Get-FileHash "$env:RUNNER_TEMP/ahk.zip").Hash -ne 'ca1a595aca4528755d8d4cd7fed23d497a37bd9a0b6892072612d68dee1bd00a') { throw 'AutoHotkey ZIP checksum mismatch' }
-          Expand-Archive "$env:RUNNER_TEMP/ahk.zip" "$env:RUNNER_TEMP/ahk"
-          $ahk = "$env:RUNNER_TEMP/ahk/AutoHotkey64.exe"
-          $app = "$env:RUNNER_TEMP/meso"
-          function Run-Ahk($path, [switch]$Validate) {
-            $arg = @('/ErrorStdOut=UTF-8', '/Force')
-            if ($Validate) { $arg += '/Validate' }
-            $arg += '"' + $path + '"'
-            $stdout = "$env:RUNNER_TEMP/ahk-stdout.txt"
-            $stderr = "$env:RUNNER_TEMP/ahk-stderr.txt"
-            Write-Host "AutoHotkey: $path"
-            $job = Start-Process $ahk -ArgumentList $arg -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
-            $finished = $job.WaitForExit(16000)
-            if (-not $finished) {
-              Get-Process -Id $job.Id | Select-Object Id, MainWindowTitle | Format-List
-              $job.Kill()
-              $job.WaitForExit()
-            }
-            Get-Content $stdout,$stderr
-            if (-not $finished -or $job.ExitCode -ne 0) { throw "AutoHotkey failed or timed out: $path" }
-          }
-          foreach ($entry in @('Meso_Control.ahk','Meso_Stream_Output.ahk','Meso_Visual_Effect.ahk')) {
-            Run-Ahk (Join-Path $app $entry) -Validate
-          }
-          $tests = @('Feature600Tests','CoreTests','WheelRelayTests','ChatRelayTests','OutputProtocolTests','Feature528Tests')
-          foreach ($test in $tests) {
-            $path = Join-Path $app "Tests/$test.ahk"
-            $source = [IO.File]::ReadAllText($path)
-            if ($test -eq 'Feature600Tests') {
-              $all = Get-Content (Join-Path $app 'Meso_Control.ahk') | Where-Object { $_ -like '#Include *' }
-              foreach ($include in $all) {
-                $source = $include.Replace('#Include ', '#Include ..\') + [Environment]::NewLine + $source
-              }
-            }
-            $source = [regex]::Replace($source, '(?m)^\s*MsgBox\([^\r\n]*\)\r?$', '')
-            $handler = '#Warn All, Off' + [Environment]::NewLine + 'OnError((err, mode) => (FileAppend(err.Message " (" err.File ":" err.Line ")" Chr(10), "*"), ExitApp(1)))'
-            [IO.File]::WriteAllText($path, $handler + [Environment]::NewLine + $source, [Text.UTF8Encoding]::new($true))
-            Run-Ahk $path
-          }
-          foreach ($test in $tests) {
-            $entry = "Tests/$test.ahk"
-            $source = Join-Path "$env:RUNNER_TEMP/meso-baseline" $entry
-            if (Test-Path $entry) { $source = $entry }
-            Copy-Item -LiteralPath $source -Destination (Join-Path $app $entry) -Force
-          }
-      - name: Report Windows audio endpoint availability
-        shell: powershell
-        run: |
-          Add-Type -Namespace Meso -Name AudioProbe -MemberDefinition @'
-          [System.Runtime.InteropServices.DllImport("winmm.dll")]
-          public static extern uint waveOutGetNumDevs();
-          '@
-          Write-Host "Wave output devices: $([Meso.AudioProbe]::waveOutGetNumDevs())"
-      - name: Check Raw Accel integration
-        shell: powershell
-        run: |
-          $asset = "$env:RUNNER_TEMP/RawAccel.zip"
-          Invoke-WebRequest -UseBasicParsing 'https://github.com/RawAccelOfficial/rawaccel/releases/download/v1.7.1/RawAccel_v1.7.1.zip' -OutFile $asset
-          if ((Get-FileHash $asset).Hash -ne '770fe3ae0919ca3c4d412f58c985eb27f5434decad809f7e8206de4e8852eec4') { throw 'Unexpected Raw Accel package' }
-          Expand-Archive $asset "$env:RUNNER_TEMP/meso-driver-test"
-          $folder = "$env:RUNNER_TEMP/meso-driver-test/RawAccel"
-          $null = [Reflection.Assembly]::LoadFrom("$folder/Newtonsoft.Json.dll")
-          $null = [Reflection.Assembly]::LoadFrom("$folder/wrapper.dll")
-          $baseline = [DriverConfig]::GetDefault()
-          foreach ($factor in @(3.0, 0.25)) {
-            $copy = [DriverConfig]::Convert($baseline.ToJSON()).Item1
-            $profile = $copy.profiles[0]
-            $profile.outputDPI *= $factor
-            $copy.SetProfileAt(0, $profile)
-            $actual = [DriverConfig]::Convert($copy.ToJSON()).Item1.profiles[0].outputDPI
-            if ($actual -ne ($baseline.profiles[0].outputDPI * $factor)) { throw "Unexpected multiplier: $factor" }
-          }
-          $status = "$env:RUNNER_TEMP/meso-driver-test/worker.state"
-          $ps64 = "$env:SystemRoot/System32/WindowsPowerShell/v1.0/powershell.exe"
-          $worker = "$env:RUNNER_TEMP/meso/Lib/RawAccelEffect.ps1"
-          & $ps64 -NoProfile -NonInteractive -File $worker -Folder $folder -StatusPath $status -ControllerPid $PID -Target 1 -DurationMs 100 -Multiplier '3.0'
-          $exit = $LASTEXITCODE
-          $result = Get-Content -LiteralPath $status -Raw
-          Write-Output $result
-          if ($exit -ne 1 -or $result -notmatch '^error\|Install Raw Accel') { throw 'Missing driver did not produce the expected status' }
-          $global:LASTEXITCODE = 0
-      - name: Package and test a 6.0.4 upgrade
-        shell: pwsh
-        run: |
-          $app = "$env:RUNNER_TEMP/meso"
-          $baseline = "$env:RUNNER_TEMP/meso-baseline"
-          & "$app/Lib/CreateRelease.ps1" -Root $app
-          $zip = "$app/Releases/Meso_Control_6_0_5_COMPLETE.zip"
-          Copy-Item "$baseline/Defaults/Meso_Chaos.ini" "$baseline/Meso_Chaos.ini"
-          New-Item -ItemType Directory -Force "$baseline/Profiles", "$baseline/Macros" | Out-Null
-          Set-Content "$baseline/Profiles/test.ini" 'profile sentinel'
-          Set-Content "$baseline/Macros/test.msq" 'macro sentinel'
-          & "$baseline/Lib/GitHubUpdateTools.ps1" -Operation StageLocal -Root $baseline -LocalZip $zip
-          if ((Get-Content "$baseline/.updates/status.ini" -Raw) -notmatch 'State=ready') { throw '6.0.4 could not stage 6.0.5' }
-          & "$baseline/Lib/GitHubUpdateTools.ps1" -Operation Apply -Root $baseline -Interpreter "$env:RUNNER_TEMP/ahk/AutoHotkey64.exe"
-          if ((Get-Content "$baseline/.updates/status.ini" -Raw) -notmatch 'State=installed') { throw '6.0.4 could not install 6.0.5' }
-          if ((Get-Content "$baseline/version.ini" -Raw) -notmatch 'Version=6\.0\.5') { throw 'Installed version mismatch' }
-          if ((Get-Content "$baseline/Meso_Chaos.ini" -Raw) -notmatch '\[P1\]') { throw 'Settings missing after upgrade' }
-          if ((Get-Content "$baseline/Profiles/test.ini") -ne 'profile sentinel') { throw 'Profile was modified' }
-          if ((Get-Content "$baseline/Macros/test.msq") -ne 'macro sentinel') { throw 'Macro was modified' }
-          $expected = (Get-Content "$zip.sha256" -Raw).Split(' ')[0]
-          if ((Get-FileHash $zip).Hash -ne $expected) { throw 'Release checksum mismatch' }
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Meso-Control-6.0.5-Windows
-          path: ${{ runner.temp }}/meso/Releases/*
-          if-no-files-found: error
-
-  publish:
-    needs: validate
-    if: github.repository == 'OPPA-1/meso-control-updates' && github.ref == 'refs/heads/release/6.0.5'
+  portrait:
     runs-on: ubuntu-latest
-    timeout-minutes: 7
-    permissions:
-      contents: write
-    concurrency:
-      group: meso-control-605-release
-      cancel-in-progress: false
+    timeout-minutes: 4
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Inspect the supplied Imgur album
+        shell: bash
+        run: |
+          python -m pip -q install pillow
+          python - <<'PY'
+          import base64, hashlib, html, io, json, os, re, urllib.request, urllib.parse
+          from concurrent.futures import ThreadPoolExecutor
+          from PIL import Image
+          album = "https://imgur.com/a/X8n6FZu"
+          urls = [album, album + "/embed", "https://api.imgur.com/oembed.json?url=" + urllib.parse.quote(album, safe=""),
+                  "https://api.imgur.com/post/v1/albums/X8n6FZu?client_id=546c25a59c58ad7&include=media",
+                  "https://i.imgur.com/X8n6FZu.png"]
+          headers = {"User-Agent": "Mozilla/5.0", "Accept": "*/*"}
+          def fetch(url):
+              req = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(req, timeout=12) as r:
+                  return r.read(3_000_000), r.headers.get("Content-Type",""), r.geturl()
+          def candidates(url):
+              try:
+                  data, kind, end = fetch(url)
+                  print("Source", kind, len(data), end, flush=True)
+                  if kind.startswith("image/"):
+                      return [url]
+                  text = html.unescape(data.decode("utf-8","replace"))
+                  text = text.replace("\\/", "/").replace(r"\u002F", "/").replace(r"\u002f", "/")
+                  hits = set(re.findall(r"(?:https?:)?//i[.]imgur[.]com/[a-zA-Z0-9]+(?:[.](?:png|jpeg|jpg|webp|gif))?", text))
+                  print("Album image links", [x for x in sorted(hits)][:12], flush=True)
+                  if "json" in kind:
+                      try:
+                          val = json.loads(text)
+                          print("Album metadata keys", list(val.keys()) if isinstance(val, dict) else type(val).__name__, flush=True)
+                      except ValueError:
+                          pass
+                  return ["https:" + u if u.startswith("//") else u for u in hits]
+              except Exception as exc:
+                  print("Source unavailable", url, str(exc), flush=True)
+                  return []
+          with ThreadPoolExecutor(max_workers=5) as pool:
+              found = sorted(set(p for candidates_for_source in pool.map(candidates, urls) for p in candidates_for_source))
+          print("Portrait candidates", found[:20])
+          for url in found[:20]:
+              try:
+                  data, kind, result = fetch(url)
+                  im = Image.open(io.BytesIO(data))
+                  print("PORTRAIT_INFO=" + json.dumps({"url":result,"format":im.format,"width":im.width,"height":im.height,"size":len(data),"sha256":hashlib.sha256(data).hexdigest()}))
+                  im.thumbnail((180,180))
+                  thumb = io.BytesIO()
+                  im.convert("RGB").save(thumb, format="JPEG", quality=77)
+                  print("PORTRAIT_PREVIEW=" + base64.b64encode(thumb.getvalue()).decode())
+                  if im.size[0] > 100 and im.size[1] > 100 and len(data) < 350000:
+                      path = "portrait-" + re.sub(r"[^a-zA-Z0-9]+","-",urllib.parse.urlsplit(result).path).strip("-")
+                      os.makedirs("portrait-files", exist_ok=True)
+                      with open("portrait-files/" + path,"wb") as fd:
+                          fd.write(data)
+              except Exception as exc:
+                  print("Candidate unavailable", url, str(exc))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: ${{ hashFiles('portrait-files/*') != '' }}
         with:
-          name: Meso-Control-6.0.5-Windows
-          path: release
-      - name: Publish 6.0.5
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd release
-          zip=Meso_Control_6_0_5_COMPLETE.zip
-          sha256sum -c "$zip.sha256"
-          if gh release view 6.0.5 >/dev/null 2>&1; then
-            echo 'Release 6.0.5 already exists. Checking its downloads.'
-          else
-            gh release create 6.0.5 "$zip" "$zip.sha256" --target "$GITHUB_SHA" \
-              --title 'Meso Control 6.0.5' \
-              --notes 'Meso Control 6.0.5 | Sonion Ring, Tung Odds & Chaos Reel Glitch' \
-              --draft
-            gh release edit 6.0.5 --draft=false --latest
-          fi
-      - name: Verify public updater downloads
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          zip=Meso_Control_6_0_5_COMPLETE.zip
-          mkdir downloaded
-          cd downloaded
-          for attempt in 1 2 3 4 5; do
-            if gh api "repos/$GITHUB_REPOSITORY/releases/latest" > release.json &&
-              jq -e '.tag_name == "6.0.5" and (.draft | not) and (.prerelease | not)' release.json >/dev/null; then
-              break
-            fi
-            sleep 4
-          done
-          jq -e '.tag_name == "6.0.5" and (.draft | not) and (.prerelease | not)' release.json
-          for asset in "$zip" "$zip.sha256"; do
-            uri=$(jq -er --arg asset "$asset" '.assets[] | select(.name == $asset) | .browser_download_url' release.json)
-            curl --fail --silent --show-error --location --retry 3 "$uri" -o "$asset"
-          done
-          sha256sum -c "$zip.sha256"
-          unzip -tq "$zip"
-          unzip -p "$zip" version.ini | tr -d '\r' | grep -Fx 'Version=6.0.5'
-
-  verify-updater:
-    needs: publish
-    runs-on: windows-latest
-    timeout-minutes: 6
-    permissions:
-      contents: read
-    steps:
-      - name: Check online from the 6.0.4 updater
-        shell: powershell
-        run: |
-          $root = "$env:RUNNER_TEMP/meso-online"
-          $baseline = "$env:RUNNER_TEMP/Meso_Control_6_0_4_COMPLETE.zip"
-          Invoke-WebRequest -UseBasicParsing 'https://github.com/OPPA-1/meso-control-updates/releases/download/6.0.4/Meso_Control_6_0_4_COMPLETE.zip' -OutFile $baseline
-          if ((Get-FileHash $baseline).Hash -ne '14477a4342ad2cec2c49e9a3247203855ed3752b4490eac8a9b3b21727d77606') { throw 'Baseline ZIP checksum mismatch' }
-          Expand-Archive $baseline $root
-          & "$root/Lib/GitHubUpdateTools.ps1" -Operation Check -Root $root -Repository OPPA-1/meso-control-updates
-          $status = Get-Content "$root/.updates/status.ini" -Raw
-          Write-Output $status
-          if ($status -notmatch 'State=ready' -or $status -notmatch 'Version=6\.0\.5') { throw 'The 6.0.4 updater did not stage 6.0.5' }
+          name: inspected-imgur-portrait
+          path: portrait-files/

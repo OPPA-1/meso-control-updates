@@ -11,6 +11,7 @@
 #Include Lib\SonionGlitch.ahk
 #Include Lib\Draw.ahk
 #Include Lib\GlitchWheel.ahk
+#Include Lib\HorrorFlash.ahk
 #Include Lib\GameplayInput.ahk
 #Include Lib\Sensitivity.ahk
 #Include Lib\MacroCodec.ahk
@@ -1125,6 +1126,7 @@ PublishState(force := false) {
     now := NowMs()
     body := Line("status", Queue.Count(), Queue.Paused, Guides)
     body .= Line("score", ScoreVisible ? 1 : 0, MesoScore, ChatScore)
+    glitch := IsObject(Sonion) && !Sonion.Preview && Sonion.Phase = "glitch"
     if IsObject(Queue.Active) && Queue.Active.HasOwnProp("Pool") {
         j := Queue.Active
         phase := j.Phase = "result" && now >= j.VisualUntil ? "idle" : j.Phase
@@ -1135,9 +1137,15 @@ PublishState(force := false) {
             body .= Line("first", j.FirstResult.Name)
         if j.HasOwnProp("Bonus") && phase = "result"
             body .= Line("bonus", j.Bonus.Name, j.BonusStart)
-    } else
-        body .= Line("wheel", "idle", "", 0, 0, "", 0, 0, "", ViewerVisible ? 1 : 0, WheelDisplayMode, TtsEnabled ? 1 : 0)
-    if IsObject(Sonion) && !Sonion.Preview && Sonion.Phase = "glitch"
+    } else {
+        displayId := glitch ? "sonion-" Sonion.Start : ""
+        body .= Line("wheel", "idle", displayId, 0, 0, "", 0, 0, "", ViewerVisible ? 1 : 0, WheelDisplayMode, TtsEnabled ? 1 : 0)
+        if glitch {
+            for p in Sonion.GlitchDisplay
+                body .= Line("item", p.Name, p.Weight)
+        }
+    }
+    if glitch
         body .= Line("glitch", Sonion.Start, Sonion.Deadline)
     body .= Line("slots", Slots.Phase, Slots.Id, Slots.Start, Slots.Mode, Slots.Reel, Slots.Locked, Slots.HoldUntil, Slots.Values*)
     for i, pool in Slots.Pools

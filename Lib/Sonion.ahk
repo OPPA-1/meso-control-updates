@@ -1,5 +1,5 @@
 ﻿SonionQuestion() {
-    return "When the onion rings... Do you answer?"
+    return "When the onion rings... Do You Answer?"
 }
 
 ScheduleSonion(target, now, stage := 0, transcript := 0) {
@@ -9,8 +9,9 @@ ScheduleSonion(target, now, stage := 0, transcript := 0) {
             return
         StopSonion()
     }
-    Sonion := {Target: target, Phase: "reply", Next: now + 5000, Step: 0, Replies: 0, Dim: 0, Panel: 0, Sound: false,
-        Preview: IsObject(stage), Stage: stage, Transcript: transcript}
+    preview := IsObject(stage)
+    Sonion := {Target: target, Phase: "cue", Next: now + (preview ? 1200 : 10000), Step: 0,
+        Replies: 0, Dim: 0, Panel: 0, Sound: false, Flash: 0, Preview: preview, Stage: stage, Transcript: transcript}
 }
 
 StartSonionPreview(owner, now) {
@@ -60,6 +61,22 @@ AdvanceSonion(now) {
     if now < call.Next
         return
     switch call.Phase {
+        case "cue":
+            call.Flash := CreateHorrorFlash(SonionBounds(call), "DO YOU ANSWER", true)
+            call.FlashStarted := now
+            call.Phase := "red"
+            call.Next := now + 40
+        case "red":
+            elapsed := now - call.FlashStarted
+            if elapsed >= 1800 {
+                CloseHorrorFlash(call.Flash)
+                call.Flash := 0
+                call.Phase := "reply"
+                call.Next := now
+            } else {
+                UpdateHorrorFlash(call.Flash, elapsed, "DO YOU ANSWER")
+                call.Next := now + 40
+            }
         case "reply":
             if call.Preview
                 AdvanceSonionPreviewReply(call, now)
@@ -106,7 +123,7 @@ AdvanceSonionReply(call, now) {
         case 0:
             SendEvent("{Enter}")
             call.Step := 1
-            call.Next := now + 180
+            call.Next := now + 135
         case 1:
             saved := ClipboardAll()
             A_Clipboard := "yes"
@@ -124,8 +141,13 @@ AdvanceSonionReply(call, now) {
                 call.Phase := "waiting"
                 call.Next := now + Random(10000, 30000)
             } else
-                call.Next := now + 220
+                call.Next := now + 160
     }
+}
+
+SonionUiImage(name) {
+    SplitPath(A_LineFile,, &scriptFolder)
+    return scriptFolder "\..\Ui\" name
 }
 
 SonionBounds(call) {
@@ -152,12 +174,15 @@ ShowSonionPhone(call, now) {
     phone.AddText("x32 y26 w63 h20 BackgroundTrans", "9:41")
     phone.AddText("x218 y26 w56 h20 Right BackgroundTrans", "● ● ●")
     phone.AddText("x34 y77 w238 h28 Center BackgroundTrans", "INCOMING CALL")
-    phone.SetFont("s43", "Segoe UI Emoji")
-    phone.AddText("x83 y112 w140 h103 Center Background714A98 +0x200", "🧅")
-    phone.SetFont("s28 Bold cFFFFFF", "Segoe UI")
-    phone.AddText("x26 y229 w254 h59 Center BackgroundTrans", "Sonion")
+    phone.AddText("x74 y111 w158 h159 Background8C5CBA", "")
+    caller := SonionUiImage("sonion_ring.png")
+    if !FileExist(caller)
+        caller := SonionUiImage("sonion_ring_default.png")
+    call.CallerImage := phone.AddPicture("x76 y113 w154 h155", caller)
+    phone.SetFont("s27 Bold cFFFFFF", "Segoe UI")
+    phone.AddText("x26 y279 w254 h51 Center BackgroundTrans", "Sonion")
     phone.SetFont("s11 Norm cCBB1EC", "Segoe UI")
-    phone.AddText("x29 y293 w248 h29 Center BackgroundTrans", "Ringing…")
+    phone.AddText("x29 y335 w248 h29 Center BackgroundTrans", "Ringing…")
     phone.SetFont("s11 Bold", "Segoe UI")
     phone.AddButton("x31 y394 w113 h49", "Decline").OnEvent("Click", AnswerSonion.Bind(false))
     phone.AddButton("x162 y394 w113 h49 Default", "Answer").OnEvent("Click", AnswerSonion.Bind(true))
@@ -215,8 +240,8 @@ AnswerSonion(answer, *) {
             call.Deadline := now + 12000
             if call.Preview
                 call.Transcript.Text := "Answered"
-            PlaySonionSound(call, "321.wav")
             ShowSonionScare(call)
+            PlaySonionSound(call, "321.wav")
         } else {
             call.Phase := "declined"
             call.Next := now + 5000
@@ -230,10 +255,8 @@ AnswerSonion(answer, *) {
 }
 
 ShowSonionScare(call, imagePath := "") {
-    if imagePath = "" {
-        SplitPath(A_LineFile,, &scriptFolder)
-        imagePath := scriptFolder "\..\Ui\sonion_jeff.png"
-    }
+    if imagePath = ""
+        imagePath := SonionUiImage("sonion_jeff.png")
     b := SonionBounds(call)
     g := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000020 -DPIScale", "Sonion")
     call.Panel := g
@@ -248,8 +271,9 @@ StartSonionGlitch(call, now) {
     call.Phase := "glitch"
     call.Start := now
     call.Deadline := now + 7000
+    PrepareSonionGlitch(call)
     if call.Preview
-        call.Transcript.Text := "Glitch"
+        call.Transcript.Text := call.GlitchMode = "reel" ? "Chaos reel glitch" : "Chaos wheel glitch"
     else
         StartSonionPunishments(call, now)
     PlaySonionSound(call, "glitch.mp3")
@@ -263,7 +287,7 @@ StartSonionPunishments(call, now) {
     call.Id := NewId()
     SonionGlitchId := call.Id
     selected := []
-    choices := EligiblePunishments()
+    choices := call.GlitchItems.Clone()
     while choices.Length && ActiveEffects.Length < 3 {
         p := choices.RemoveAt(WeightedPick(choices))
         if p.Action = "Send Chat" || !CompatibleWheelPick(p, selected) || !CompatibleActivePick(p, ActiveEffects)
@@ -276,11 +300,26 @@ StartSonionPunishments(call, now) {
 }
 
 SonionGlitchRoom(count) {
-    global ActiveEffects, SonionGlitchId
-    return !IsSet(SonionGlitchId) || !HasEffects(SonionGlitchId) || ActiveEffects.Length + count <= 3
+    global ActiveEffects, SonionGlitchId, Sonion
+    if ActiveEffects.Length + count <= 3
+        return true
+    if IsSet(Sonion) && IsObject(Sonion) && !Sonion.Preview && Sonion.Phase = "glitch"
+        return false
+    return !IsSet(SonionGlitchId) || !HasEffects(SonionGlitchId)
+}
+
+PrepareSonionGlitch(call) {
+    global WheelDisplayMode, Queue
+    call.GlitchMode := IsSet(WheelDisplayMode) && WheelDisplayMode = "reel" ? "reel" : "wheel"
+    call.GlitchItems := EligiblePunishments()
+    call.GlitchDisplay := call.GlitchItems
+    if !call.Preview && IsSet(Queue) && IsObject(Queue.Active) && Queue.Active.HasOwnProp("Pool")
+        call.GlitchDisplay := Queue.Active.Pool
 }
 
 ShowSonionGlitch(call, now) {
+    if !call.HasOwnProp("GlitchMode")
+        PrepareSonionGlitch(call)
     b := SonionBounds(call)
     g := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08080020 -DPIScale", "Sonion")
     call.Panel := g
@@ -294,7 +333,7 @@ ShowSonionGlitch(call, now) {
 UpdateSonionGlitch(call, now) {
     c := call.GlitchSurface
     c.Clear(0xFF00FF00)
-    DrawGlitchWheel(c, 0, 0, now - call.Start)
+    DrawGlitchWheel(c, 0, 0, now - call.Start, call.GlitchMode, call.GlitchDisplay)
     c.Flush()
     origin := Buffer(8, 0), size := Buffer(8, 0), source := Buffer(8, 0)
     NumPut("Int", call.X, "Int", call.Y, origin)
@@ -334,6 +373,7 @@ StopSonion() {
     call := Sonion
     Sonion := 0
     try RestoreEffectClipboard(call)
+    CloseHorrorFlash(call.Flash)
     CloseSonionWindows(call)
     if call.HasOwnProp("GlitchSurface")
         call.GlitchSurface.Dispose()

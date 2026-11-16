@@ -4,6 +4,7 @@
 #Include Lib\OutputState.ahk
 #Include Lib\Draw.ahk
 #Include Lib\GlitchWheel.ahk
+#Include Lib\HorrorFlash.ahk
 #Include Lib\WheelLabels.ahk
 #Include Lib\SlotLabels.ahk
 #Include Lib\SignalScene.ahk
@@ -80,15 +81,7 @@ SpeechStarted := 0
 SpeechWaiting := false
 SpeechLastTick := 0
 HorrorLastAudioCheck := 0
-HorrorLastWord := ""
-HorrorLastDistort := 0
-HorrorTintGui := 0
-HorrorTextGui := 0
-HorrorShadowText := 0
-HorrorMainText := 0
-HorrorBars := []
-HorrorTextOrigin := [0, 0]
-HorrorLastAlpha := 0
+HorrorFlash := 0
 Borderless := false
 GuideRects := [[0, 0, 800, 800, "CHAOS DISPLAY"], [800, 0, 1120, 480, "ACTIVITY SLOTS"], [800, 480, 1120, 180, "ACTIVE PUNISHMENT"], [800, 660, 1120, 360, "ACTIVITY TIMER"], [0, 800, 800, 280, "RUN TALLY"]]
 OutputGui := Gui("-DPIScale -Resize -MaximizeBox", "Meso Stream Output")
@@ -229,21 +222,10 @@ Render() {
                 Back.Rect(rect[1], rect[2], rect[3], rect[4], 0xFF00FF00)
                 switch index {
                     case 1:
-                        if State.GlitchEnd > now {
-                            elapsed := now - State.GlitchStart
-                            DrawGlitchWheel(Back, 220, 220, elapsed)
-                        } else if w[2] != "idle" {
-                            if w[11] = "reel"
-                                DrawChaosReel(Back, now)
-                            else if IsObject(Disk)
-                                DrawWheel(Back, now)
-                            if State.FirstResult != "" {
-                                Back.RoundRect(34, 33, 380, 45, 12, 0xFF170D24, 0xFF8151B4, 1)
-                                Back.Text("FIRST  " State.FirstResult, 51, 40, 346, 31, 16, 0xFFF9F5FF, true, 0)
-                            }
-                            if State.Bonus != ""
-                                DrawSpinBonus(Back, State.Bonus, now - State.BonusStart)
-                        }
+                        if State.GlitchEnd > now
+                            RenderChaosGlitch(Back, now)
+                        else if w[2] != "idle"
+                            DrawChaosPanel(Back, now)
                     case 2:
                         if s[2] != "idle"
                             DrawSlots(Back, now)
@@ -280,6 +262,36 @@ Render() {
     }
 }
 
+DrawChaosPanel(c, now, glitchElapsed := -1) {
+    global State, Disk
+    if State.DisplayMode = "reel"
+        DrawChaosReel(c, now, glitchElapsed)
+    else if IsObject(Disk)
+        DrawWheel(c, now, glitchElapsed)
+    if State.FirstResult != "" {
+        c.RoundRect(34, 33, 380, 45, 12, 0xFF170D24, 0xFF8151B4, 1)
+        c.Text("FIRST  " State.FirstResult, 51, 40, 346, 31, 16, 0xFFF9F5FF, true, 0)
+    }
+    if State.Bonus != ""
+        DrawSpinBonus(c, State.Bonus, now - State.BonusStart)
+}
+
+RenderChaosGlitch(c, now) {
+    global State
+    elapsed := Max(0, now - State.GlitchStart)
+    if !State.Items.Length {
+        DrawGlitchWheel(c, 220, 220, elapsed, State.DisplayMode)
+        return
+    }
+    frame := ChaosGlitchFrame(elapsed)
+    saved := c.Push()
+    try {
+        c.Transform(frame.X, frame.Y, 0)
+        DrawChaosPanel(c, now, elapsed)
+        DrawChaosInterference(c, 32, 20, 736, 750, frame.Index)
+    } finally c.Pop(saved)
+}
+
 BuildDisk(items) {
     global WheelLabelLayouts
     WheelLabelLayouts := []
@@ -306,11 +318,11 @@ BuildDisk(items) {
     return c
 }
 
-DrawWheel(c, now) {
+DrawWheel(c, now, glitchElapsed := -1) {
     global State, Disk, TickIndex, LastTickSound, LandPlayed, WheelLabelLayouts, WheelHub
     w := State.Wheel
     t := w[2] = "announce" ? 0.0 : Min(1.0, Max(0.0, (now - (w[4] + 0)) / 5000))
-    rotation := (w[5] + 0) * (1 - (1 - t) ** 3)
+    rotation := glitchElapsed >= 0 && w[2] = "idle" ? Mod(glitchElapsed * .55, 360) : (w[5] + 0) * (1 - (1 - t) ** 3)
     c.RotateImage(Disk.Image, rotation, 400, 400, 800, 800)
     total := 0.0
     for p in State.Items
@@ -401,7 +413,7 @@ DisposeReelSprites() {
     ReelSprites := Map()
 }
 
-DrawChaosReel(c, now) {
+DrawChaosReel(c, now, glitchElapsed := -1) {
     global State, ReelSprites, TickIndex, LastTickSound, LandPlayed
     w := State.Wheel
     n := State.Items.Length
@@ -419,7 +431,7 @@ DrawChaosReel(c, now) {
     selected := Max(0, Min(n-1, (w[7]+0) - 1))
     target := n * 9 + selected
     t := w[2] = "announce" ? 0.0 : Min(1.0, Max(0.0, (now-(w[4]+0)) / 5000))
-    position := target * (1 - (1-t)**3)
+    position := glitchElapsed >= 0 && w[2] = "idle" ? glitchElapsed / 72 : target * (1 - (1-t)**3)
     base := Floor(position)
     fract := position - base
     saved := c.Push()
@@ -968,7 +980,7 @@ ProcessHorrorEvents(now) {
 }
 
 StartHorror(now) {
-    global HorrorActive, HorrorStarted, HorrorUntil, HorrorLastWord, HorrorLastAudioCheck, FigureState, FigureDue
+    global HorrorActive, HorrorStarted, HorrorUntil, HorrorLastAudioCheck, FigureState, FigureDue
     global AudioReady, HorrorSoundPath
     RefreshAudioSettings()
     if !FileExist(HorrorSoundPath) {
@@ -997,7 +1009,6 @@ StartHorror(now) {
     FigureDue := HorrorStarted + 20000
     HorrorUntil := HorrorStarted + 15000
     HorrorLastAudioCheck := HorrorStarted
-    HorrorLastWord := ""
     HorrorActive := true
     UpdateHorror(HorrorStarted)
     LogEvent("HE IS COMING! audio and overlay started (" duration " ms)")
@@ -1042,49 +1053,15 @@ HorrorGameRectangle(&x, &y, &w, &h) {
 }
 
 CreateHorrorOverlay() {
-    global HorrorTintGui, HorrorTextGui, HorrorShadowText, HorrorMainText, HorrorBars, HorrorTextOrigin, HorrorLastAlpha
-    if GuiHwndSafe(HorrorTintGui) || GuiHwndSafe(HorrorTextGui)
+    global HorrorFlash
+    if IsObject(HorrorFlash)
         StopHorror()
     HorrorGameRectangle(&x, &y, &w, &h)
-    tint := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000020 -DPIScale", "Meso Horror Tint")
-    tint.BackColor := "57060C"
-    tint.MarginX := 0
-    tint.MarginY := 0
-    HorrorBars := []
-    colors := ["A31225", "3B040A", "8E0A1D", "290007", "AB1029", "360309", "8B0F20"]
-    loop 7 {
-        yy := Round(h * (A_Index * 0.12))
-        bw := Round(w * (0.34 + Mod(A_Index * 19, 53) / 100))
-        xx := Round(w * (Mod(A_Index * 29, 47) / 100))
-        bar := tint.AddText("x" xx " y" yy " w" bw " h" (2 + Mod(A_Index * 3, 7)) " Background" colors[A_Index], "")
-        HorrorBars.Push(bar)
-    }
-    tint.Show("NoActivate x" x " y" y " w" w " h" h)
-    HorrorTintGui := tint
-    HorrorLastAlpha := 150
-    WinSetTransparent(HorrorLastAlpha, "ahk_id " tint.Hwnd)
-    words := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000020 -DPIScale", "Meso Horror Words")
-    words.BackColor := "010101"
-    words.MarginX := 0
-    words.MarginY := 0
-    fontSize := Max(52, Min(108, Round(w / 16)))
-    tx := Round(w * 0.03)
-    ty := Round(h * 0.38)
-    tw := Round(w * 0.94)
-    th := Round(h * 0.20)
-    HorrorTextOrigin := [tx, ty, tw, th]
-    words.SetFont("s" fontSize " Bold c910C13", "Segoe UI Black")
-    HorrorShadowText := words.AddText("x" (tx + 8) " y" (ty + 6) " w" tw " h" th " Center +0x200 BackgroundTrans", "")
-    words.SetFont("s" fontSize " Bold cFFFFFF", "Segoe UI Black")
-    HorrorMainText := words.AddText("x" tx " y" ty " w" tw " h" th " Center +0x200 BackgroundTrans", "")
-    words.Show("NoActivate x" x " y" y " w" w " h" h)
-    HorrorTextGui := words
-    WinSetTransColor("010101", "ahk_id " words.Hwnd)
+    HorrorFlash := CreateHorrorFlash({X: x, Y: y, W: w, H: h})
 }
 
 UpdateHorror(now) {
-    global HorrorActive, HorrorStarted, HorrorUntil, HorrorLastAudioCheck, HorrorLastWord, HorrorLastDistort
-    global HorrorShadowText, HorrorMainText, HorrorTintGui, HorrorTextOrigin, HorrorLastAlpha, HorrorBars
+    global HorrorActive, HorrorStarted, HorrorUntil, HorrorLastAudioCheck, HorrorFlash
     if !HorrorActive
         return
     if now >= HorrorUntil {
@@ -1099,48 +1076,17 @@ UpdateHorror(now) {
         }
     }
     elapsed := now - HorrorStarted
-    word := HorrorWordAt(elapsed)
-    if word != HorrorLastWord {
-        HorrorLastWord := word
-        HorrorShadowText.Text := word
-        HorrorMainText.Text := word
-    }
-    if now - HorrorLastDistort >= 160 {
-        HorrorLastDistort := now
-        origin := HorrorTextOrigin
-        dx := Random(-13, 13)
-        dy := Random(-8, 8)
-        try HorrorShadowText.Move(origin[1] + dx + 9, origin[2] + dy + 6)
-        try HorrorMainText.Move(origin[1] + dx, origin[2] + dy)
-        alpha := Round(147 + 17 * Sin(elapsed / 360.0))
-        if Abs(alpha - HorrorLastAlpha) >= 3 && GuiHwndSafe(HorrorTintGui) {
-            HorrorLastAlpha := alpha
-            try WinSetTransparent(alpha, "ahk_id " HorrorTintGui.Hwnd)
-        }
-        for i, bar in HorrorBars {
-            if Mod(i, 3) = Mod(Floor(elapsed / 160), 3)
-                try bar.Move(, Round((i * 0.12 + Random(-2, 2) / 100) * HorrorTextOrigin[4] * 4))
-        }
-    }
+    UpdateHorrorFlash(HorrorFlash, elapsed, HorrorWordAt(elapsed))
 }
 
 StopHorror() {
-    global HorrorActive, HorrorStarted, HorrorUntil, HorrorLastWord, HorrorTintGui, HorrorTextGui
-    global HorrorShadowText, HorrorMainText, HorrorBars
+    global HorrorActive, HorrorStarted, HorrorUntil, HorrorFlash
     HorrorActive := false
     Mci("stop mesohorror")
-    for g in [HorrorTextGui, HorrorTintGui] {
-        if GuiHwndSafe(g)
-            try g.Destroy()
-    }
-    HorrorTextGui := 0
-    HorrorTintGui := 0
-    HorrorShadowText := 0
-    HorrorMainText := 0
-    HorrorBars := []
+    CloseHorrorFlash(HorrorFlash)
+    HorrorFlash := 0
     HorrorStarted := 0
     HorrorUntil := 0
-    HorrorLastWord := ""
 }
 
 StartFigureMajor(now) {

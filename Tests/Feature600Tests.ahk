@@ -10,6 +10,7 @@
 #Include ..\Lib\SonionGlitch.ahk
 #Include ..\Lib\Draw.ahk
 #Include ..\Lib\GlitchWheel.ahk
+#Include ..\Lib\HorrorFlash.ahk
 #Include ..\Lib\GameplayInput.ahk
 #Include ..\Lib\Sensitivity.ahk
 #Include ..\Lib\MacroCodec.ahk
@@ -117,7 +118,7 @@ try {
     Check(OutputPanelKeys(parsed, 2600)[1] != OutputPanelKeys(parsed, 2650)[1], "Glitch animation refreshes the wheel panel")
     Check(parsed.ActiveItems.Length = 2, "Both effects reach the OBS state")
     Check(OutputPanelKeys(parsed, 3100)[3] != "idle", "Second OBS effect outlasts first")
-    FileAppend("PASS " checks " Meso Control 6.0.4 checks`n", "*")
+    FileAppend("PASS " checks " Meso Control 6.0.5 checks`n", "*")
 } catch as err {
     FileAppend("FAIL: " err.Message " (" err.File ":" err.Line ")`n", "*")
     ExitApp(1)
@@ -230,7 +231,13 @@ TestFeature603(p1, p2) {
     Check(ActiveEffects[1].Start = ActiveEffects[2].Start, "Both bonus effects start together")
     CancelEffects()
     ScheduleSonion(1, 2000)
-    Check(Sonion.Next = 7000 && Sonion.Replies = 0 && SonionQuestion() = "When the onion rings... Do you answer?", "The Sonion chat sequence starts five seconds after the question")
+    Check(Sonion.Next = 12000 && Sonion.Phase = "cue" && Sonion.Replies = 0
+        && SonionQuestion() == "When the onion rings... Do You Answer?", "Sonion schedules the exact chat text and ten-second lead")
+    neutral := ChatHorrorChoices("")
+    afterTung := ChatHorrorChoices(TungChatPhrase())
+    afterSonion := ChatHorrorChoices(SonionQuestion())
+    Check(neutral[1].Weight = neutral[2].Weight && afterTung[1].Weight < afterTung[2].Weight
+        && afterSonion[1].Weight > afterSonion[2].Weight, "Tung and Sonion share neutral odds and favor the other after a roll")
     ScheduleSonion(2, 3000)
     Check(Sonion.Target = 1, "A pending Sonion call cannot be replaced")
     StopSonion()
@@ -244,13 +251,14 @@ TestFeature603(p1, p2) {
 }
 
 TestSonionWindows() {
-    global Sonion, InputLockOwners
+    global Sonion, InputLockOwners, WheelDisplayMode
     game := Gui(, "Meso Sonion test")
     game.Show("w800 h600")
     try {
         now := NowMs()
         ScheduleSonion(game.Hwnd, now)
         ShowSonionPhone(Sonion, now)
+        Check(Sonion.CallerImage.Hwnd && DllCall("user32\GetWindowLongPtrW", "Ptr", Sonion.CallerImage.Hwnd, "Int", -16, "Ptr"), "The phone loads its bundled caller image")
         Check(Sonion.Phase = "ringing" && GuiHwndSafe(Sonion.Dim) && GuiHwndSafe(Sonion.Panel), "Incoming call opens a dimmer and phone")
         Check(ControlGetText("Button1", "ahk_id " Sonion.Panel.Hwnd) = "Decline" && ControlGetText("Button2", "ahk_id " Sonion.Panel.Hwnd) = "Answer", "Both phone choices are clickable buttons")
         WinActivate("ahk_id " game.Hwnd)
@@ -262,8 +270,10 @@ TestSonionWindows() {
         StopSonion()
         ScheduleSonion(game.Hwnd, now)
         Sonion.Start := now
+        WheelDisplayMode := "reel"
         ShowSonionGlitch(Sonion, now)
-        Check(GuiHwndSafe(Sonion.Panel) && Sonion.Next = now + 33, "Glitch overlay draws a frame and schedules the next one")
+        Check(GuiHwndSafe(Sonion.Panel) && Sonion.GlitchMode = "reel" && Sonion.Next = now + 33, "The glitch overlay renders a reel frame in reel mode")
+        WheelDisplayMode := "wheel"
         CloseSonionWindows(Sonion)
         ShowSonionScare(Sonion, A_ScriptDir "\..\Ui\sonion_jeff.png")
         Check(GuiHwndSafe(Sonion.Panel), "Jeff overlay opens with the packaged image")
@@ -297,6 +307,13 @@ TestSequencePicker() {
         call := Sonion
         Check(call.Transcript.Text = SonionQuestion() && call.Replies = 0, "Preview starts with the Sonion chat prompt")
         clipboard := DllCall("user32\GetClipboardSequenceNumber", "UInt")
+        AdvanceSonion(call.Next - 1)
+        Check(call.Phase = "cue" && !IsObject(call.Flash), "Preview waits before flashing")
+        AdvanceSonion(call.Next)
+        Check(call.Phase = "red" && GuiHwndSafe(call.Flash.Tint) && call.Flash.Main.Text = "DO YOU ANSWER", "Sonion uses Tung's red overlay for DO YOU ANSWER")
+        flash := call.Flash
+        AdvanceSonion(call.FlashStarted + 1800)
+        Check(call.Phase = "reply" && !GuiHwndSafe(flash.Tint), "The red cue ends before chat replies")
         loop 3
             AdvanceSonion(call.Next)
         Check(call.Replies = 3 && call.Transcript.Text = SonionQuestion() "`nyes`nyes`nyes", "Preview shows all three replies")
@@ -308,6 +325,8 @@ TestSequencePicker() {
         Check(!GuiHwndSafe(call.Stage) && !GuiHwndSafe(call.Panel), "Stop closes preview windows during the scare")
         ClickSequenceButton("Test sequence", settings.Hwnd, (*) => IsObject(Sonion))
         call := Sonion
+        AdvanceSonion(call.Next)
+        AdvanceSonion(call.FlashStarted + 1800)
         loop 4
             AdvanceSonion(call.Next)
         ClickSequenceButton("Button1", call.Panel.Hwnd, (*) => call.Phase = "declined")
@@ -316,7 +335,8 @@ TestSequencePicker() {
         AdvanceSonion(call.Next - 1)
         Check(call.Phase = "declined", "The preview respects the five-second delay after decline")
         AdvanceSonion(call.Next)
-        Check(call.Phase = "glitch" && GuiHwndSafe(call.Panel) && ActiveEffects.Length = count, "Decline runs the glitch preview without any live punishments")
+        Check(call.Phase = "glitch" && GuiHwndSafe(call.Panel) && call.GlitchMode = "wheel"
+            && ActiveEffects.Length = count, "Decline runs the selected wheel preview without live punishments")
         AdvanceSonion(call.Deadline)
         Check(!IsObject(Sonion) && !GuiHwndSafe(call.Stage), "The finished preview cleans up its windows")
         TestSequence(selector, notice)
@@ -358,6 +378,10 @@ ScheduleHorror(due) {
 }
 
 SaveAppSettings() {
+}
+
+EligiblePunishments() {
+    return [{Name: "Tunnel Vision", Weight: 1}, {Name: "Lights Out", Weight: 1}]
 }
 
 SetText(control, value) {

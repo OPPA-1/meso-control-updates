@@ -1,12 +1,10 @@
 ﻿
 ChooseChatPhrase() {
-    static recent := []
-    phrases := [
+    static recent := [], lastHorror := ""
+    ordinary := [
         "I suck at this game.",
         "Drake is my favorite Artist!",
         "Chat is better than me.",
-        "he is coming..",
-        SonionQuestion(),
         "Soggy cereal is vastly superior to crunchy cereal.",
         "The middle seat on an airplane is the premium spot.",
         "Wet socks aren't actually that bad.",
@@ -15,25 +13,37 @@ ChooseChatPhrase() {
         "What is a shower?",
         "I'm a chud. I'm a chud. I'm a chud."
     ]
-    choices := []
-    for phrase in phrases {
+    choices := ChatHorrorChoices(lastHorror)
+    for phrase in ordinary {
         found := false
-        for previous in recent
-            if phrase = previous
+        for previous in recent {
+            if phrase = previous {
                 found := true
-        if !found {
-            choices.Push(phrase)
-            if phrase = "he is coming.." && Random(1, 2) = 1
-                choices.Push(phrase)
+                break
+            }
         }
+        if !found
+            choices.Push({Text: phrase, Weight: 2})
     }
-    if !choices.Length
-        choices := phrases.Clone()
-    selection := choices[Random(1, choices.Length)]
-    recent.Push(selection)
-    while recent.Length > 5
-        recent.RemoveAt(1)
-    return selection
+    selected := choices[WeightedPick(choices)].Text
+    if selected = SonionQuestion() || selected = TungChatPhrase() {
+        lastHorror := selected
+    } else {
+        recent.Push(selected)
+        if recent.Length > 5
+            recent.RemoveAt(1)
+    }
+    return selected
+}
+
+TungChatPhrase() {
+    return "he is coming.."
+}
+
+ChatHorrorChoices(lastHorror) {
+    sonion := SonionQuestion(), tung := TungChatPhrase()
+    bias := lastHorror = tung ? 1 : lastHorror = sonion ? -1 : 0
+    return [{Text: tung, Weight: 3 - bias}, {Text: sonion, Weight: 3 + bias}]
 }
 
 InventorySwapKey() {
@@ -674,7 +684,7 @@ AdvanceOneEffect(now) {
                 RestoreEffectClipboard(Effect)
                 if !Pulse(SimpleKey(first, "Enter"), now, 35)
                     return
-                if Effect.Note = "he is coming.."
+                if Effect.Note = TungChatPhrase()
                     ScheduleHorror(now + 15000)
                 else if Effect.Note = SonionQuestion()
                     ScheduleSonion(Effect.Target, now)

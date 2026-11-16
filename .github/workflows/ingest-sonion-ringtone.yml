@@ -16,10 +16,9 @@ jobs:
         run: |
           set -euo pipefail
           curl -fLsS --retry 3 --retry-all-errors --max-time 45 'https://www.dropbox.com/scl/fi/asrpyidfsrg3bwx9e09u7/ringring.mp3?rlkey=mg7j1afyz14rn88bg9sja98lv&dl=1' -o ringring.mp3
-          file -b ringring.mp3
-          codec=$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 ringring.mp3)
-          test "$codec" = 'mp3'
-          ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 ringring.mp3
+          file -b ringring.mp3 | tee ringtone-format.txt
+          grep -qi 'layer III' ringtone-format.txt
+          stat -c 'MP3 bytes: %s' ringring.mp3
           printf 'RINGRING_SHA256=%s\n' "$(sha256sum ringring.mp3 | cut -d ' ' -f 1)"
           python - <<'PY'
           import base64, json

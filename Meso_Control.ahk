@@ -9,6 +9,7 @@
 #Include Lib\Sonion.ahk
 #Include Lib\SonionScream.ahk
 #Include Lib\SonionGlitch.ahk
+#Include Lib\SonionRingtone.ahk
 #Include Lib\Draw.ahk
 #Include Lib\GlitchWheel.ahk
 #Include Lib\HorrorFlash.ahk

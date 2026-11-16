@@ -11,7 +11,7 @@ ScheduleSonion(target, now, stage := 0, transcript := 0) {
     }
     preview := IsObject(stage)
     Sonion := {Target: target, Phase: "cue", Next: now + (preview ? 1200 : 10000), Step: 0,
-        Replies: 0, Dim: 0, Panel: 0, Sound: false, Flash: 0, Preview: preview, Stage: stage, Transcript: transcript}
+        Replies: 0, Dim: 0, Panel: 0, Sound: false, RingCheckAt: 0, Flash: 0, Preview: preview, Stage: stage, Transcript: transcript}
 }
 
 StartSonionPreview(owner, now) {
@@ -86,10 +86,7 @@ AdvanceSonion(now) {
             if call.Preview || !InputLockOwners.Count
                 ShowSonionPhone(call, now)
         case "ringing":
-            if now >= call.Deadline {
-                StopSonion()
-                return
-            }
+            KeepSonionRinging(call, now)
             ShakeSonionPhone(call, now)
         case "answered":
             if GuiHwndSafe(call.Panel) && now >= call.HideAt
@@ -191,7 +188,6 @@ ShowSonionPhone(call, now) {
     WinSetRegion("0-0 w306 h506 R55-55", "ahk_id " phone.Hwnd)
     call.PhoneClip := 0
     call.Phase := "ringing"
-    call.Deadline := now + 30000
     call.Next := now
     PlaySonionSound(call, "ringring.mp3", true)
 }
@@ -390,11 +386,13 @@ StopSonion() {
 
 SonionMediaFile(dir, name) {
     if name = "ringring.mp3" {
-        path := SonionUiAsset(name)
-        return FileExist(path) ? path : ""
-    }
+        custom := SonionUiAsset(name)
+        if FileExist(custom)
+            return custom
+        data := SonionRingtoneData()
+    } else
+        data := name = "321.wav" ? SonionScreamData() : SonionGlitchData()
     path := dir "\sonion-603-" name
-    data := name = "321.wav" ? SonionScreamData() : SonionGlitchData()
     size := 0
     if !DllCall("crypt32\CryptStringToBinaryW", "WStr", data, "UInt", 0, "UInt", 1, "Ptr", 0, "UInt*", &size, "Ptr", 0, "Ptr", 0, "Int")
         throw Error("Sonion audio size could not be read")
@@ -407,8 +405,17 @@ SonionMediaFile(dir, name) {
     return path
 }
 
-SonionMci(command) {
-    return DllCall("winmm\mciSendStringW", "WStr", command, "Ptr", 0, "UInt", 0, "Ptr", 0)
+SonionMci(command, response := 0, chars := 0) {
+    return DllCall("winmm\mciSendStringW", "WStr", command, "Ptr", response, "UInt", chars, "Ptr", 0)
+}
+
+KeepSonionRinging(call, now) {
+    if !call.Sound || now < call.RingCheckAt
+        return
+    call.RingCheckAt := now + 120
+    mode := Buffer(32, 0)
+    if !SonionMci("status mesosonion mode", mode, 16) && StrGet(mode, "UTF-16") = "stopped"
+        SonionMci("play mesosonion from 0")
 }
 
 StopSonionSound(call) {
@@ -421,10 +428,8 @@ StopSonionSound(call) {
 PlaySonionSound(call, name, repeat := false) {
     global RuntimeDir
     try {
-        path := SonionMediaFile(RuntimeDir, name)
-        if path = ""
-            return
         StopSonionSound(call)
+        path := SonionMediaFile(RuntimeDir, name)
         device := name = "321.wav" ? "waveaudio" : "mpegvideo"
         status := SonionMci("open " Chr(34) path Chr(34) " type " device " alias mesosonion")
         if status

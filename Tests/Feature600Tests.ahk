@@ -8,6 +8,7 @@
 #Include ..\Lib\Sonion.ahk
 #Include ..\Lib\SonionScream.ahk
 #Include ..\Lib\SonionGlitch.ahk
+#Include ..\Lib\SonionRingtone.ahk
 #Include ..\Lib\Draw.ahk
 #Include ..\Lib\GlitchWheel.ahk
 #Include ..\Lib\HorrorFlash.ahk
@@ -259,7 +260,8 @@ TestSonionRingtone() {
         Check(SonionMediaFile(RuntimeDir, "ringring.mp3") = ringtone, "The installed custom ringtone is used as-is")
         return
     }
-    Check(SonionMediaFile(RuntimeDir, "ringring.mp3") = "", "A missing ringtone leaves the phone sound unset")
+    bundled := SonionMediaFile(RuntimeDir, "ringring.mp3")
+    Check(FileExist(bundled) && FileGetSize(bundled) > 0, "The distributed ringtone decodes to an MP3")
     FileCopy(SonionMediaFile(RuntimeDir, "glitch.mp3"), ringtone)
     try Check(SonionMediaFile(RuntimeDir, "ringring.mp3") = ringtone, "Ringring loads from the installed Ui directory")
     finally FileDelete(ringtone)
@@ -352,7 +354,10 @@ TestSequencePicker() {
         AdvanceSonion(call.Next - 1)
         Check(call.Phase = "cue" && !IsObject(call.Flash), "Preview waits before flashing")
         AdvanceSonion(call.Next)
-        Check(call.Phase = "red" && GuiHwndSafe(call.Flash.Tint) && call.Flash.Main.Text = "DO YOU ANSWER", "Sonion uses Tung's red overlay for DO YOU ANSWER")
+        Check(call.Phase = "red" && GuiHwndSafe(call.Flash.Tint) && call.Flash.Word = "DO YOU ANSWER", "Sonion uses Tung's red overlay for DO YOU ANSWER")
+        layerStyle := DllCall("user32\GetWindowLongPtrW", "Ptr", call.Flash.TextGui.Hwnd, "Int", -20, "Ptr")
+        blankPixel := DllCall("gdi32\GetPixel", "Ptr", call.Flash.TextSurface.DC, "Int", 0, "Int", 0, "UInt")
+        Check((layerStyle & 0x80000) && blankPixel = 0x00010101, "The text sits on a color-keyed layer with transparent padding")
         flash := call.Flash
         AdvanceSonion(call.FlashStarted + 1800)
         Check(call.Phase = "reply" && !GuiHwndSafe(flash.Tint), "The red cue ends before chat replies")
@@ -371,6 +376,8 @@ TestSequencePicker() {
         AdvanceSonion(call.FlashStarted + 1800)
         loop 4
             AdvanceSonion(call.Next)
+        AdvanceSonion(call.Next + 31000)
+        Check(call.Phase = "ringing" && GuiHwndSafe(call.Panel), "The phone keeps ringing beyond the old 30-second cutoff")
         call.Sound := true
         ClickSequenceButton("Button1", call.Panel.Hwnd, (*) => call.Phase = "declined")
         Check(call.Phase = "declined" && !GuiHwndSafe(call.Panel) && !call.Sound,

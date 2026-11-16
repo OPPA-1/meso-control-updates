@@ -166,7 +166,7 @@ LoadAndMigratePunishments() {
         }
         weight := IniRead(path, section, "Weight", "5")
         value := IniRead(path, section, "Value", "0")
-        if legacyTiming && action = "Alt+Enter" && name = "Alt+Enter" && duration = 3 && value = 0
+        if legacyTiming && action = "Alt+Enter" && name = "Alt+Enter" && IsNumber(duration) && Float(duration) = 3 && IsNumber(value) && Float(value) = 0
             duration := 5
         p := {Name: name, Enabled: IniRead(path, section, "Enabled", "1") = "1", Duration: IsNumber(duration) ? Max(0.1, Min(300, Float(duration))) : 3, Weight: IsNumber(weight) ? Max(0, Min(100, Float(weight))) : 5, Action: action, Keys: keys, Value: IsNumber(value) ? Float(value) : 0, Vary: IniRead(path, section, "Vary", action = "Change Mouse Sensitivity" ? "1" : "0") = "1", Grid: PunishmentGrid(IniRead(path, section, "Grid", "2x3"))}
         result.Push(p)

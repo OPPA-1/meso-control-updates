@@ -200,11 +200,11 @@ TestFeature603(p1, p2) {
         section := "P" A_Index
         if IniRead(ConfigFile, section, "Action", "") = "Alt+Enter" {
             Check(IniRead(ConfigFile, section, "Duration") = "5", "New Alt+Enter default is 5 seconds")
-            IniWrite("3", ConfigFile, section, "Duration")
-            IniWrite("0", ConfigFile, section, "Value")
+            IniWrite("3.0", ConfigFile, section, "Duration")
+            IniWrite("0.0", ConfigFile, section, "Value")
             IniDelete(ConfigFile, "Meta", "Feature603")
             LoadAndMigratePunishments()
-            Check(IniRead(ConfigFile, section, "Duration") = "5", "Old Alt+Enter default upgrades to 5 seconds")
+            Check(Float(IniRead(ConfigFile, section, "Duration")) = 5, "Old Alt+Enter default upgrades to 5 seconds")
             IniWrite("3", ConfigFile, section, "Duration")
             LoadAndMigratePunishments()
             Check(IniRead(ConfigFile, section, "Duration") = "3", "A later custom duration is preserved")
@@ -239,6 +239,37 @@ TestFeature603(p1, p2) {
     finally wave.Close()
     Check(FileGetSize(SonionMediaFile(RuntimeDir, "glitch.mp3")) > 20000, "The packaged glitch track decodes")
     Check(FileExist(A_ScriptDir "\..\Ui\sonion_jeff.png") != "", "Jeff image is packaged")
+    TestSonionWindows()
+}
+
+TestSonionWindows() {
+    global Sonion, InputLockOwners
+    game := Gui(, "Meso Sonion test")
+    game.Show("w800 h600")
+    try {
+        now := NowMs()
+        ScheduleSonion(game.Hwnd, now)
+        ShowSonionPhone(Sonion, now)
+        Check(Sonion.Phase = "ringing" && GuiHwndSafe(Sonion.Dim) && GuiHwndSafe(Sonion.Panel), "Incoming call opens a dimmer and phone")
+        Check(ControlGetText("Button1", "ahk_id " Sonion.Panel.Hwnd) = "Decline" && ControlGetText("Button2", "ahk_id " Sonion.Panel.Hwnd) = "Answer", "Both phone choices are clickable buttons")
+        WinActivate("ahk_id " game.Hwnd)
+        if WinWaitActive("ahk_id " game.Hwnd,, 1) {
+            ShakeSonionPhone(Sonion, now + 100)
+            AnswerSonion(false)
+            Check(Sonion.Phase = "declined" && Sonion.Next >= now + 5000 && !GuiHwndSafe(Sonion.Panel), "Decline closes the phone and defers the glitch for five seconds")
+        }
+        StopSonion()
+        ScheduleSonion(game.Hwnd, now)
+        Sonion.Start := now
+        ShowSonionGlitch(Sonion, now)
+        Check(GuiHwndSafe(Sonion.Panel) && Sonion.Next = now + 33, "Glitch overlay draws a frame and schedules the next one")
+        CloseSonionWindows(Sonion)
+        ShowSonionScare(Sonion)
+        Check(GuiHwndSafe(Sonion.Panel), "Jeff overlay opens with the packaged image")
+    } finally {
+        StopSonion()
+        game.Destroy()
+    }
 }
 
 TestInputHooks() {

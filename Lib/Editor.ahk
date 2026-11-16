@@ -298,7 +298,7 @@ OpenSettings(*) {
     global SlotTickPathEdit, SlotLandPathEdit, SlotTickSlider, SlotLandSlider, SlotTickSoundPath, SlotLandSoundPath, SlotTickVolume, SlotLandVolume
     global EditorBindButton, InputMethodDrop, GameInputMethod, ModeDrop, WheelDisplayMode, AutoCheck, SlotAutoRoll, DestinyCheck, DestinyOnlyMode, SettingsGuideCheck, Guides, OutputEnabled
     global SequenceSlider, TtsSlider, SequenceVolumeLabel, TtsVolumeLabel, SpeakCheck, ViewerCheck, SequenceVolume, TtsVolume, TtsEnabled, ViewerVisible, SpinAnnouncementVolume, AnnouncementSlider, AnnouncementLabel
-    global PunishmentProfileDrop, EditorVary, EditorGrid, EditorKeyLabel, EditorValueLabel, EditorRawKeys, EditorRange, RawAccelButton
+    global PunishmentProfileDrop, EditorVary, EditorGrid, EditorKeyLabel, EditorValueLabel, EditorRawKeys, EditorRange, RawAccelButton, EditorChatTest
     if GuiHwndSafe(SettingsGui) {
         SettingsGui.Show()
         return
@@ -351,6 +351,7 @@ OpenSettings(*) {
     EditorRange := SettingsGui.AddText("x553 y470 w230 h24 Hidden cAA95BF", "")
     RawAccelButton := SettingsGui.AddButton("x322 y461 w216 h30 Hidden", "Link Raw Accel")
     RawAccelButton.OnEvent("Click", ChooseRawAccel)
+    EditorChatTest := BuildChatTestPicker(SettingsGui)
     EditorRawKeys := ""
     for spec in [[35, "New", EditorAdd, 75], [118, "Save", EditorSave, 78], [204, "Delete", EditorDelete, 78], [290, "Record inputs", OpenRecorder, 129], [427, "Preview", PreviewSelected, 108], [544, "Live test", LiveTestSelected, 125]] {
         b := SettingsGui.AddButton("x" spec[1] " y510 w" spec[4] " h33", spec[2])
@@ -586,7 +587,7 @@ EditorRowSelected(control, index, selected) {
 }
 
 UpdateEditorHint(*) {
-    global EditorAction, EditorKeys, EditorKeyLabel, EditorBindButton, EditorValue, EditorValueLabel, EditorVary, EditorGrid, EditorRange, RawAccelButton, SettingsGui
+    global EditorAction, EditorKeys, EditorKeyLabel, EditorBindButton, EditorValue, EditorValueLabel, EditorVary, EditorGrid, EditorRange, RawAccelButton, SettingsGui, EditorChatTest
     if !GuiHwndSafe(SettingsGui)
         return
     action := EditorAction.Text
@@ -604,6 +605,8 @@ UpdateEditorHint(*) {
     if shared.Length
         EditorKeys.Value := JoinKeys(shared)
     EditorBindButton.Visible := action = "Spam Key" || action = "Send Chat"
+    EditorChatTest.Label.Visible := action = "Send Chat"
+    EditorChatTest.Picker.Visible := action = "Send Chat"
     EditorValueLabel.Visible := valueLabels.Has(action)
     EditorValueLabel.Text := valueLabels.Get(action, "Value")
     EditorGrid.Visible := action = "Screen Shuffle"
@@ -690,6 +693,14 @@ EditorDelete(*) {
     RefreshSettingsList()
 }
 
+BuildChatTestPicker(gui) {
+    messages := ["Random message", TungChatPhrase(), SonionQuestion()]
+    messages.Push(OrdinaryChatMessages()*)
+    label := gui.AddText("x35 y471 w78 h22 Hidden", "Test message")
+    picker := gui.AddDropDownList("x115 y465 w668 Choose1 Hidden", messages)
+    return {Label: label, Picker: picker}
+}
+
 PreviewSelected(*) {
     StartSelectedTest(true)
 }
@@ -699,7 +710,7 @@ LiveTestSelected(*) {
 }
 
 StartSelectedTest(preview) {
-    global Queue, Punishments, SelectedEditorIndex, WheelControllerEnabled, Recorder, Clock, LastEffectMessage
+    global Queue, Punishments, SelectedEditorIndex, WheelControllerEnabled, Recorder, Clock, LastEffectMessage, EditorChatTest
     if IsObject(Queue.Active) || Queue.Count() || HasEffects() || Recorder.Phase != "idle" {
         MsgBox("Finish or stop the current spin and clear the queue before testing an item.", "Meso Control")
         return
@@ -712,10 +723,9 @@ StartSelectedTest(preview) {
         return
     if !EditorSave()
         return
-    p := Punishments[SelectedEditorIndex].Clone()
-    if p.Weight <= 0
-        p.Weight := 1
-    p.TimerGeneration := Clock.Generation
+    picker := EditorChatTest.Picker
+    chatMessage := picker.Value > 1 ? picker.Text : ""
+    p := MakeTestPunishment(Punishments[SelectedEditorIndex], preview, chatMessage, Clock.Generation)
     Queue.Accept(NewId(), preview, NowMs())
     Queue.Paused := false
     j := Queue.Take(NowMs())
@@ -729,6 +739,16 @@ StartSelectedTest(preview) {
         CloseSettings()
     PublishState(true)
     UpdateMainUi()
+}
+
+MakeTestPunishment(punishment, preview, chatMessage, timerGeneration) {
+    test := punishment.Clone()
+    if test.Weight <= 0
+        test.Weight := 1
+    test.TimerGeneration := timerGeneration
+    if !preview && test.Action = "Send Chat" && chatMessage != ""
+        test.ChatTestMessage := chatMessage
+    return test
 }
 
 PickSound(which) {

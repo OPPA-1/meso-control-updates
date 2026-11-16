@@ -1,8 +1,8 @@
-name: Meso Control 6.0.6 Windows validation
+name: Meso Control 6.0.7 Windows validation
 
 on:
   push:
-    branches: ['release/6.0.6']
+    branches: ['release/6.0.7']
     paths: ['version.ini', 'Lib/**', 'Tests/**', '.github/workflows/meso-control-6-validation.yml']
   workflow_dispatch:
 
@@ -18,11 +18,11 @@ jobs:
       - name: Restore release baseline
         shell: pwsh
         run: |
-          $asset = 'Meso_Control_6_0_5_COMPLETE.zip'
-          $uri = 'https://github.com/OPPA-1/meso-control-updates/releases/download/6.0.5/' + $asset
+          $asset = 'Meso_Control_6_0_6_COMPLETE.zip'
+          $uri = 'https://github.com/OPPA-1/meso-control-updates/releases/download/6.0.6/' + $asset
           Invoke-WebRequest $uri -OutFile "$env:RUNNER_TEMP/$asset"
           $actual = (Get-FileHash "$env:RUNNER_TEMP/$asset" -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actual -ne '7fd5e6f099b921d1143d90b996906648fb1d61411b03adfaf3603d0f91872745') { throw 'Baseline ZIP checksum mismatch' }
+          if ($actual -ne 'd235275e790f9211d0f3000c6aa3bca6dbe7b0b848b4ca6c79b7a7cf8a7a227a') { throw 'Baseline ZIP checksum mismatch' }
           Expand-Archive "$env:RUNNER_TEMP/$asset" "$env:RUNNER_TEMP/meso-baseline"
           Copy-Item "$env:RUNNER_TEMP/meso-baseline" "$env:RUNNER_TEMP/meso" -Recurse
           foreach ($entry in @(git ls-files | Where-Object { $_ -match '^(Lib/|Tests/|Ui/sonion_(jeff|ring_default)\.png$|StreamerBot/|Meso_.*\.(ahk|vbs)$|version\.ini$)' })) {
@@ -120,22 +120,22 @@ jobs:
           Write-Output $result
           if ($exit -ne 1 -or $result -notmatch '^error\|Install Raw Accel') { throw 'Missing driver did not produce the expected status' }
           $global:LASTEXITCODE = 0
-      - name: Package and test a 6.0.5 upgrade
+      - name: Package and test a 6.0.6 upgrade
         shell: pwsh
         run: |
           $app = "$env:RUNNER_TEMP/meso"
           $baseline = "$env:RUNNER_TEMP/meso-baseline"
           & "$app/Lib/CreateRelease.ps1" -Root $app
-          $zip = "$app/Releases/Meso_Control_6_0_6_COMPLETE.zip"
+          $zip = "$app/Releases/Meso_Control_6_0_7_COMPLETE.zip"
           Copy-Item "$baseline/Defaults/Meso_Chaos.ini" "$baseline/Meso_Chaos.ini"
           New-Item -ItemType Directory -Force "$baseline/Profiles", "$baseline/Macros" | Out-Null
           Set-Content "$baseline/Profiles/test.ini" 'profile sentinel'
           Set-Content "$baseline/Macros/test.msq" 'macro sentinel'
           & "$baseline/Lib/GitHubUpdateTools.ps1" -Operation StageLocal -Root $baseline -LocalZip $zip
-          if ((Get-Content "$baseline/.updates/status.ini" -Raw) -notmatch 'State=ready') { throw '6.0.5 could not stage 6.0.6' }
+          if ((Get-Content "$baseline/.updates/status.ini" -Raw) -notmatch 'State=ready') { throw '6.0.6 could not stage 6.0.7' }
           & "$baseline/Lib/GitHubUpdateTools.ps1" -Operation Apply -Root $baseline -Interpreter "$env:RUNNER_TEMP/ahk/AutoHotkey64.exe"
-          if ((Get-Content "$baseline/.updates/status.ini" -Raw) -notmatch 'State=installed') { throw '6.0.5 could not install 6.0.6' }
-          if ((Get-Content "$baseline/version.ini" -Raw) -notmatch 'Version=6\.0\.6') { throw 'Installed version mismatch' }
+          if ((Get-Content "$baseline/.updates/status.ini" -Raw) -notmatch 'State=installed') { throw '6.0.6 could not install 6.0.7' }
+          if ((Get-Content "$baseline/version.ini" -Raw) -notmatch 'Version=6\.0\.7') { throw 'Installed version mismatch' }
           if ((Get-Content "$baseline/Meso_Chaos.ini" -Raw) -notmatch '\[P1\]') { throw 'Settings missing after upgrade' }
           if ((Get-Content "$baseline/Profiles/test.ini") -ne 'profile sentinel') { throw 'Profile was modified' }
           if ((Get-Content "$baseline/Macros/test.msq") -ne 'macro sentinel') { throw 'Macro was modified' }
@@ -143,26 +143,26 @@ jobs:
           if ((Get-FileHash $zip).Hash -ne $expected) { throw 'Release checksum mismatch' }
       - uses: actions/upload-artifact@v4
         with:
-          name: Meso-Control-6.0.6-Windows
+          name: Meso-Control-6.0.7-Windows
           path: ${{ runner.temp }}/meso/Releases/*
           if-no-files-found: error
 
   publish:
     needs: validate
-    if: github.repository == 'OPPA-1/meso-control-updates' && github.ref == 'refs/heads/release/6.0.6'
+    if: github.repository == 'OPPA-1/meso-control-updates' && github.ref == 'refs/heads/release/6.0.7'
     runs-on: ubuntu-latest
     timeout-minutes: 7
     permissions:
       contents: write
     concurrency:
-      group: meso-control-606-release
+      group: meso-control-607-release
       cancel-in-progress: false
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: Meso-Control-6.0.6-Windows
+          name: Meso-Control-6.0.7-Windows
           path: release
-      - name: Publish 6.0.6
+      - name: Publish 6.0.7
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -170,16 +170,16 @@ jobs:
         run: |
           set -euo pipefail
           cd release
-          zip=Meso_Control_6_0_6_COMPLETE.zip
+          zip=Meso_Control_6_0_7_COMPLETE.zip
           sha256sum -c "$zip.sha256"
-          if gh release view 6.0.6 >/dev/null 2>&1; then
-            echo 'Release 6.0.6 already exists. Checking its downloads.'
+          if gh release view 6.0.7 >/dev/null 2>&1; then
+            echo 'Release 6.0.7 already exists. Checking its downloads.'
           else
-            gh release create 6.0.6 "$zip" "$zip.sha256" --target "$GITHUB_SHA" \
-              --title 'Meso Control 6.0.6' \
-              --notes 'Meso Control 6.0.6 | Original Sonion Caller Portrait' \
+            gh release create 6.0.7 "$zip" "$zip.sha256" --target "$GITHUB_SHA" \
+              --title 'Meso Control 6.0.7' \
+              --notes 'Meso Control 6.0.7 | Pick a Message for Send Chat Live Tests' \
               --draft
-            gh release edit 6.0.6 --draft=false --latest
+            gh release edit 6.0.7 --draft=false --latest
           fi
       - name: Verify public updater downloads
         env:
@@ -187,17 +187,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          zip=Meso_Control_6_0_6_COMPLETE.zip
+          zip=Meso_Control_6_0_7_COMPLETE.zip
           mkdir downloaded
           cd downloaded
           for attempt in 1 2 3 4 5; do
             if gh api "repos/$GITHUB_REPOSITORY/releases/latest" > release.json &&
-              jq -e '.tag_name == "6.0.6" and (.draft | not) and (.prerelease | not)' release.json >/dev/null; then
+              jq -e '.tag_name == "6.0.7" and (.draft | not) and (.prerelease | not)' release.json >/dev/null; then
               break
             fi
             sleep 4
           done
-          jq -e '.tag_name == "6.0.6" and (.draft | not) and (.prerelease | not)' release.json
+          jq -e '.tag_name == "6.0.7" and (.draft | not) and (.prerelease | not)' release.json
           for asset in "$zip" "$zip.sha256"; do
             uri=$(jq -er --arg asset "$asset" '.assets[] | select(.name == $asset) | .browser_download_url' release.json)
             curl --fail --silent --show-error --location --retry 3 "$uri" -o "$asset"
@@ -207,7 +207,7 @@ jobs:
           actual_portrait=$(unzip -p "$zip" Ui/sonion_ring_default.png | sha256sum | cut -d ' ' -f 1)
           test "$actual_portrait" = 'd50ada00f786930d5ed51e7ad00a64d1f876d57dc0781053fe6584d9eb93e4d9'
           echo 'Published ZIP contains the exact Sonion PNG'
-          unzip -p "$zip" version.ini | tr -d '\r' | grep -Fx 'Version=6.0.6'
+          unzip -p "$zip" version.ini | tr -d '\r' | grep -Fx 'Version=6.0.7'
 
   verify-updater:
     needs: publish
@@ -216,15 +216,15 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Check online from the 6.0.5 updater
+      - name: Check online from the 6.0.6 updater
         shell: powershell
         run: |
           $root = "$env:RUNNER_TEMP/meso-online"
-          $baseline = "$env:RUNNER_TEMP/Meso_Control_6_0_5_COMPLETE.zip"
-          Invoke-WebRequest -UseBasicParsing 'https://github.com/OPPA-1/meso-control-updates/releases/download/6.0.5/Meso_Control_6_0_5_COMPLETE.zip' -OutFile $baseline
-          if ((Get-FileHash $baseline).Hash -ne '7fd5e6f099b921d1143d90b996906648fb1d61411b03adfaf3603d0f91872745') { throw 'Baseline ZIP checksum mismatch' }
+          $baseline = "$env:RUNNER_TEMP/Meso_Control_6_0_6_COMPLETE.zip"
+          Invoke-WebRequest -UseBasicParsing 'https://github.com/OPPA-1/meso-control-updates/releases/download/6.0.6/Meso_Control_6_0_6_COMPLETE.zip' -OutFile $baseline
+          if ((Get-FileHash $baseline).Hash -ne 'd235275e790f9211d0f3000c6aa3bca6dbe7b0b848b4ca6c79b7a7cf8a7a227a') { throw 'Baseline ZIP checksum mismatch' }
           Expand-Archive $baseline $root
           & "$root/Lib/GitHubUpdateTools.ps1" -Operation Check -Root $root -Repository OPPA-1/meso-control-updates
           $status = Get-Content "$root/.updates/status.ini" -Raw
           Write-Output $status
-          if ($status -notmatch 'State=ready' -or $status -notmatch 'Version=6\.0\.6') { throw 'The 6.0.5 updater did not stage 6.0.6' }
+          if ($status -notmatch 'State=ready' -or $status -notmatch 'Version=6\.0\.7') { throw 'The 6.0.6 updater did not stage 6.0.7' }

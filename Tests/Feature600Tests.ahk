@@ -108,6 +108,7 @@ try {
     TestGameplayInput()
     TestFeature603(p1, p2)
     TestSequencePicker()
+    TestSendChatPicker()
     Check(DirectArguments(5, 'C:\Meso Control\Meso_Wheel_Trigger.vbs') = '//B //NoLogo "C:\Meso Control\Meso_Wheel_Trigger.vbs" --direct 5 %userName%', "Copied Streamer.bot arguments preserve the quoted path")
     state := Line("meta", 1, 1, 2000) Line("status", 0, 0, 0) Line("wheel", "idle", "", 0, 0, "", 0, 0)
     state .= Line("slots", "idle", "", 0, 0, 0, 0, 0, "", "", "", "") Line("timer", "idle", 0, 0, 0)
@@ -281,6 +282,33 @@ TestSonionWindows() {
         StopSonion()
         game.Destroy()
     }
+}
+
+TestSendChatPicker() {
+    window := Gui(, "Meso Send Chat picker test")
+    try {
+        controls := BuildChatTestPicker(window)
+        picker := controls.Picker
+        Check(picker.Value = 1 && picker.Text = "Random message", "Send Chat live tests default to a random line")
+        expected := [TungChatPhrase(), SonionQuestion()]
+        expected.Push(OrdinaryChatMessages()*)
+        saved := {Name: "Send Chat", Action: "Send Chat", Weight: 0}
+        for i, phrase in expected {
+            picker.Choose(i + 1)
+            Check(picker.Text == phrase, "The chat picker includes the exact message: " phrase)
+            test := MakeTestPunishment(saved, false, picker.Text, 42)
+            Check(SendChatMessage(test) == phrase, "The selected message reaches Send Chat verbatim: " phrase)
+        }
+        Check(test.Weight = 1 && test.TimerGeneration = 42 && saved.Weight = 0
+            && !saved.HasOwnProp("ChatTestMessage"), "A specific test uses a one-off punishment copy")
+        picker.Choose(1)
+        randomTest := MakeTestPunishment(saved, false, "", 42)
+        Check(!randomTest.HasOwnProp("ChatTestMessage"), "Random tests use the normal message selection")
+        preview := MakeTestPunishment(saved, true, SonionQuestion(), 42)
+        other := MakeTestPunishment({Action: "Lights Out", Weight: 1}, false, SonionQuestion(), 42)
+        Check(!preview.HasOwnProp("ChatTestMessage") && !other.HasOwnProp("ChatTestMessage"),
+            "A selected line applies only to live Send Chat tests")
+    } finally window.Destroy()
 }
 
 TestSequencePicker() {

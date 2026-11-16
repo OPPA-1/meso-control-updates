@@ -1,7 +1,6 @@
 ﻿
-ChooseChatPhrase() {
-    static recent := [], lastHorror := ""
-    ordinary := [
+OrdinaryChatMessages() {
+    return [
         "I suck at this game.",
         "Drake is my favorite Artist!",
         "Chat is better than me.",
@@ -13,8 +12,12 @@ ChooseChatPhrase() {
         "What is a shower?",
         "I'm a chud. I'm a chud. I'm a chud."
     ]
+}
+
+ChooseChatPhrase() {
+    static recent := [], lastHorror := ""
     choices := ChatHorrorChoices(lastHorror)
-    for phrase in ordinary {
+    for phrase in OrdinaryChatMessages() {
         found := false
         for previous in recent {
             if phrase = previous {
@@ -34,6 +37,10 @@ ChooseChatPhrase() {
             recent.RemoveAt(1)
     }
     return selected
+}
+
+SendChatMessage(p) {
+    return p.HasOwnProp("ChatTestMessage") ? p.ChatTestMessage : ChooseChatPhrase()
 }
 
 TungChatPhrase() {
@@ -665,7 +672,7 @@ AdvanceOneEffect(now) {
                     Effect.Tabs -= 1
                 Effect.Next := now + 90
             } else if Effect.Step = 1 {
-                message := ChooseChatPhrase()
+                message := SendChatMessage(p)
                 savedClipboard := ClipboardAll()
                 try {
                     A_Clipboard := message

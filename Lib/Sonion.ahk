@@ -145,7 +145,7 @@ AdvanceSonionReply(call, now) {
     }
 }
 
-SonionUiImage(name) {
+SonionUiAsset(name) {
     SplitPath(A_LineFile,, &scriptFolder)
     return scriptFolder "\..\Ui\" name
 }
@@ -175,9 +175,9 @@ ShowSonionPhone(call, now) {
     phone.AddText("x218 y26 w56 h20 Right BackgroundTrans", "● ● ●")
     phone.AddText("x34 y77 w238 h28 Center BackgroundTrans", "INCOMING CALL")
     phone.AddText("x74 y111 w158 h159 Background8C5CBA", "")
-    caller := SonionUiImage("sonion_ring.png")
+    caller := SonionUiAsset("sonion_ring.png")
     if !FileExist(caller)
-        caller := SonionUiImage("sonion_ring_default.png")
+        caller := SonionUiAsset("sonion_ring_default.png")
     call.CallerImage := phone.AddPicture("x76 y113 w154 h155", caller)
     phone.SetFont("s27 Bold cFFFFFF", "Segoe UI")
     phone.AddText("x26 y279 w254 h51 Center BackgroundTrans", "Sonion")
@@ -193,6 +193,7 @@ ShowSonionPhone(call, now) {
     call.Phase := "ringing"
     call.Deadline := now + 30000
     call.Next := now
+    PlaySonionSound(call, "ringring.mp3", true)
 }
 
 ShakeSonionPhone(call, now) {
@@ -231,6 +232,7 @@ AnswerSonion(answer, *) {
             }
             try WinActivate("ahk_id " call.Target)
         }
+        StopSonionSound(call)
         CloseSonionWindows(call)
         now := NowMs()
         if answer {
@@ -256,7 +258,7 @@ AnswerSonion(answer, *) {
 
 ShowSonionScare(call, imagePath := "") {
     if imagePath = ""
-        imagePath := SonionUiImage("sonion_jeff.png")
+        imagePath := SonionUiAsset("sonion_jeff.png")
     b := SonionBounds(call)
     g := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000020 -DPIScale", "Sonion")
     call.Panel := g
@@ -372,6 +374,7 @@ StopSonion() {
         return
     call := Sonion
     Sonion := 0
+    StopSonionSound(call)
     try RestoreEffectClipboard(call)
     CloseHorrorFlash(call.Flash)
     CloseSonionWindows(call)
@@ -381,13 +384,15 @@ StopSonion() {
         token := call.GlitchToken
         GdipStop(&token)
     }
-    if call.Sound
-        DllCall("winmm\mciSendStringW", "WStr", "close mesosonion", "Ptr", 0, "UInt", 0, "Ptr", 0)
     if GuiHwndSafe(call.Stage)
         try call.Stage.Destroy()
 }
 
 SonionMediaFile(dir, name) {
+    if name = "ringring.mp3" {
+        path := SonionUiAsset(name)
+        return FileExist(path) ? path : ""
+    }
     path := dir "\sonion-603-" name
     data := name = "321.wav" ? SonionScreamData() : SonionGlitchData()
     size := 0
@@ -402,20 +407,37 @@ SonionMediaFile(dir, name) {
     return path
 }
 
-PlaySonionSound(call, name) {
+SonionMci(command) {
+    return DllCall("winmm\mciSendStringW", "WStr", command, "Ptr", 0, "UInt", 0, "Ptr", 0)
+}
+
+StopSonionSound(call) {
+    if call.Sound {
+        SonionMci("close mesosonion")
+        call.Sound := false
+    }
+}
+
+PlaySonionSound(call, name, repeat := false) {
     global RuntimeDir
     try {
         path := SonionMediaFile(RuntimeDir, name)
+        if path = ""
+            return
+        StopSonionSound(call)
         device := name = "321.wav" ? "waveaudio" : "mpegvideo"
-        cmd := "open " Chr(34) path Chr(34) " type " device " alias mesosonion"
-        status := DllCall("winmm\mciSendStringW", "WStr", cmd, "Ptr", 0, "UInt", 0, "Ptr", 0)
+        status := SonionMci("open " Chr(34) path Chr(34) " type " device " alias mesosonion")
         if status
             throw Error("Windows audio open returned " status)
         call.Sound := true
-        DllCall("winmm\mciSendStringW", "WStr", "setaudio mesosonion volume to 1000", "Ptr", 0, "UInt", 0, "Ptr", 0)
-        status := DllCall("winmm\mciSendStringW", "WStr", "play mesosonion from 0", "Ptr", 0, "UInt", 0, "Ptr", 0)
+        SonionMci("setaudio mesosonion volume to 1000")
+        status := SonionMci("play mesosonion from 0" (repeat ? " repeat" : ""))
+        if status && repeat
+            status := SonionMci("play mesosonion from 0")
         if status
             throw Error("Windows audio playback returned " status)
-    } catch as err
+    } catch as err {
+        StopSonionSound(call)
         LogEvent("Sonion audio: " err.Message)
+    }
 }

@@ -248,7 +248,21 @@ TestFeature603(p1, p2) {
     finally wave.Close()
     Check(FileGetSize(SonionMediaFile(RuntimeDir, "glitch.mp3")) > 20000, "The packaged glitch track decodes")
     Check(FileExist(A_ScriptDir "\..\Ui\sonion_jeff.png") != "", "Jeff image is packaged")
+    TestSonionRingtone()
     TestSonionWindows()
+}
+
+TestSonionRingtone() {
+    global RuntimeDir
+    ringtone := SonionUiAsset("ringring.mp3")
+    if FileExist(ringtone) {
+        Check(SonionMediaFile(RuntimeDir, "ringring.mp3") = ringtone, "The installed custom ringtone is used as-is")
+        return
+    }
+    Check(SonionMediaFile(RuntimeDir, "ringring.mp3") = "", "A missing ringtone leaves the phone sound unset")
+    FileCopy(SonionMediaFile(RuntimeDir, "glitch.mp3"), ringtone)
+    try Check(SonionMediaFile(RuntimeDir, "ringring.mp3") = ringtone, "Ringring loads from the installed Ui directory")
+    finally FileDelete(ringtone)
 }
 
 TestSonionWindows() {
@@ -357,8 +371,10 @@ TestSequencePicker() {
         AdvanceSonion(call.FlashStarted + 1800)
         loop 4
             AdvanceSonion(call.Next)
+        call.Sound := true
         ClickSequenceButton("Button1", call.Panel.Hwnd, (*) => call.Phase = "declined")
-        Check(call.Phase = "declined" && !GuiHwndSafe(call.Panel), "Declining closes the ringing preview")
+        Check(call.Phase = "declined" && !GuiHwndSafe(call.Panel) && !call.Sound,
+            "Declining closes the ringing preview and releases the ringtone")
         count := ActiveEffects.Length
         AdvanceSonion(call.Next - 1)
         Check(call.Phase = "declined", "The preview respects the five-second delay after decline")

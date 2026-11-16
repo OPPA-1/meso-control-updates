@@ -73,7 +73,8 @@ try {
         if DllCall("dwmapi\DwmRegisterThumbnail", "Ptr", EffectGui.Hwnd, "Ptr", target, "Ptr*", &WideThumbnail, "Int") < 0
             throw Error("Game preview could not be created")
     } else if mode = "zoom" || mode = "puzzle" || mode = "drunk" || mode = "mirror" {
-        amount := mode = "zoom" ? FixedPunishmentValue({Action: "Tunnel Vision", Value: amount}) : mode = "drunk" ? 1.17 : 1.0
+        sway := mode = "drunk" ? FixedPunishmentValue({Action: "Drunk Vision", Value: amount}) : 0
+        amount := mode = "zoom" ? FixedPunishmentValue({Action: "Tunnel Vision", Value: amount}) : mode = "drunk" ? 1.25 + 0.18 * sway : 1.0
         excluded := Buffer(A_PtrSize, 0)
         NumPut("Ptr", EffectGui.Hwnd, excluded)
         count := mode = "puzzle" ? PuzzleRows * PuzzleColumns : 1
@@ -205,7 +206,7 @@ RunVisualFrames() {
 
 UpdateVisualFrame(force := false) {
     global mode, target, parent, finish, EffectGui, mag, amount, StatusPath, LastBounds, LastRect
-    global WorkerClosing, DarkPanel, PuzzleMags, PuzzleOrder, StartupTick, MirrorVisual, WideThumbnail
+    global WorkerClosing, DarkPanel, PuzzleMags, PuzzleOrder, StartupTick, MirrorVisual, WideThumbnail, sway
     if WorkerClosing
         return
     if NowMs() >= finish || !ProcessExist(parent) || FileExist(StatusPath ".cancel") {
@@ -245,10 +246,11 @@ UpdateVisualFrame(force := false) {
             if mode = "drunk" {
                 t := (NowMs() - StartupTick) / 1000.0
                 rw := Max(1, Round(w / amount)), rh := Max(1, Round(h / amount))
-                ox := Round(w * (0.028 * Sin(t * 2.7) + 0.011 * Sin(t * 5.1)))
-                oy := Round(h * (0.025 * Cos(t * 2.0) + 0.010 * Sin(t * 4.4)))
-                left := x + Floor((w - rw) / 2) + ox
-                top := y + Floor((h - rh) / 2) + oy
+                strength := 0.055 + 0.042 * sway
+                ox := Round((w - rw) * strength * (Sin(t * 4.2) + 0.47 * Sin(t * 10.5)))
+                oy := Round((h - rh) * strength * (Cos(t * 3.6) + 0.44 * Sin(t * 8.1)))
+                left := x + Max(0, Min(w - rw, Floor((w - rw) / 2) + ox))
+                top := y + Max(0, Min(h - rh, Floor((h - rh) / 2) + oy))
                 rectKey := left "|" top "|" rw "|" rh
                 if rectKey != LastRect {
                     SetVisualSource(mag, left, top, left + rw, top + rh)

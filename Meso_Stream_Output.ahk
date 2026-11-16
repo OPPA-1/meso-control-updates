@@ -3,6 +3,7 @@
 #Include Lib\Core.ahk
 #Include Lib\OutputState.ahk
 #Include Lib\Draw.ahk
+#Include Lib\GlitchWheel.ahk
 #Include Lib\WheelLabels.ahk
 #Include Lib\SlotLabels.ahk
 #Include Lib\SignalScene.ahk
@@ -228,7 +229,10 @@ Render() {
                 Back.Rect(rect[1], rect[2], rect[3], rect[4], 0xFF00FF00)
                 switch index {
                     case 1:
-                        if w[2] != "idle" {
+                        if State.GlitchEnd > now {
+                            elapsed := now - State.GlitchStart
+                            DrawGlitchWheel(Back, 220, 220, elapsed)
+                        } else if w[2] != "idle" {
                             if w[11] = "reel"
                                 DrawChaosReel(Back, now)
                             else if IsObject(Disk)
@@ -237,6 +241,8 @@ Render() {
                                 Back.RoundRect(34, 33, 380, 45, 12, 0xFF170D24, 0xFF8151B4, 1)
                                 Back.Text("FIRST  " State.FirstResult, 51, 40, 346, 31, 16, 0xFFF9F5FF, true, 0)
                             }
+                            if State.Bonus != ""
+                                DrawSpinBonus(Back, State.Bonus, now - State.BonusStart)
                         }
                     case 2:
                         if s[2] != "idle"
@@ -345,6 +351,16 @@ DrawWheel(c, now) {
         LandPlayed := true
         PlayAlias("mesoland", true)
     }
+}
+
+DrawSpinBonus(c, title, elapsed) {
+    motion := 1 - Min(1, Max(0, elapsed / 420))
+    y := 513 + Round(38 * motion ** 3)
+    c.RoundRect(174, y, 452, 81, 18, 0xFF171127, 0xFFCFABFF, 2)
+    c.RoundRect(185, y + 11, 74, 59, 13, 0xFFA4FFDB, 0xFFE2FFF2, 1)
+    c.TextNoWrap("2×", 192, y + 15, 60, 50, 30, 0xFF233040, true)
+    c.TextNoWrap("BONUS", 274, y + 11, 330, 19, 13, 0xFFCBA8F7, true, 0)
+    DrawFittedDisplay(c, title, 274, y + 31, 330, 43, 23, 13)
 }
 
 DrawViewerBadge(c) {

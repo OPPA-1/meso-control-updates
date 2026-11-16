@@ -5,40 +5,38 @@ BeginGameplayInputLock(item) {
         if GameplayLock.Target != item.Target
             return false
     } else {
-        GameplayLock := {Target: item.Target, Native: false, Keyboard: 0, Mouse: 0, KeyProc: 0, MouseProc: 0, Modifiers: Map()}
+        GameplayLock := {Target: item.Target, Native: false, Keyboard: 0, Mouse: 0, KeyProc: 0, MouseProc: 0, Modifiers: Map(), Anchor: 0, PreviousClip: 0}
         for vk in [0xA2, 0xA3, 0xA4, 0xA5]
             GameplayLock.Modifiers[vk] := DllCall("user32\GetAsyncKeyState", "Int", vk, "Short") < 0
 
-        ; Prefer the system input gate. The hooks keep standard desktop installs usable.
+        ; Block system input and keep foreground hooks active for mouse and keyboard events.
         GameplayLock.Native := DllCall("user32\BlockInput", "Int", true, "Int") != 0
         nativeError := A_LastError
         hookError := 0
-        if !GameplayLock.Native {
-            try {
-                GameplayLock.KeyProc := CallbackCreate(GameplayKeyboardHook, "", 3)
-                GameplayLock.MouseProc := CallbackCreate(GameplayMouseHook, "", 3)
-                module := DllCall("kernel32\GetModuleHandleW", "Ptr", 0, "Ptr")
-                GameplayLock.Keyboard := DllCall("user32\SetWindowsHookExW", "Int", 13, "Ptr", GameplayLock.KeyProc, "Ptr", module, "UInt", 0, "Ptr")
+        try {
+            GameplayLock.KeyProc := CallbackCreate(GameplayKeyboardHook, "", 3)
+            GameplayLock.MouseProc := CallbackCreate(GameplayMouseHook, "", 3)
+            module := DllCall("kernel32\GetModuleHandleW", "Ptr", 0, "Ptr")
+            GameplayLock.Keyboard := DllCall("user32\SetWindowsHookExW", "Int", 13, "Ptr", GameplayLock.KeyProc, "Ptr", module, "UInt", 0, "Ptr")
+            hookError := A_LastError
+            if GameplayLock.Keyboard {
+                GameplayLock.Mouse := DllCall("user32\SetWindowsHookExW", "Int", 14, "Ptr", GameplayLock.MouseProc, "Ptr", module, "UInt", 0, "Ptr")
                 hookError := A_LastError
-                if GameplayLock.Keyboard {
-                    GameplayLock.Mouse := DllCall("user32\SetWindowsHookExW", "Int", 14, "Ptr", GameplayLock.MouseProc, "Ptr", module, "UInt", 0, "Ptr")
-                    hookError := A_LastError
-                }
-            } catch as err {
-                LogEvent("Input hook setup failed: " err.Message)
             }
-            if !GameplayLock.Keyboard || !GameplayLock.Mouse {
-                CloseGameplayInputLock()
-                LogEvent("Input lock unavailable | BlockInput=" nativeError " | hooks=" hookError)
-                return false
-            }
-            LogEvent("Input lock: foreground hooks | BlockInput=" nativeError)
-        } else
-            LogEvent("Input lock: Windows BlockInput")
+        } catch as err {
+            LogEvent("Input hook setup failed: " err.Message)
+        }
+        if !GameplayLock.Native && (!GameplayLock.Keyboard || !GameplayLock.Mouse) {
+            CloseGameplayInputLock()
+            LogEvent("Input lock unavailable | BlockInput=" nativeError " | hooks=" hookError)
+            return false
+        }
+        LogEvent(GameplayLock.Native ? "Input lock: Windows BlockInput plus foreground hooks" : "Input lock: foreground hooks | BlockInput=" nativeError)
         ClearHeldGameBindings()
     }
     InputLockOwners[item] := true
     item.InputLock := true
+    RefreshGameplayMouseLock()
     return true
 }
 
@@ -50,6 +48,8 @@ EndGameplayInputLock(item) {
     InputLockOwners.Delete(item)
     if !InputLockOwners.Count
         CloseGameplayInputLock()
+    else
+        RefreshGameplayMouseLock()
 }
 
 CloseGameplayInputLock() {
@@ -57,6 +57,7 @@ CloseGameplayInputLock() {
     if !IsObject(GameplayLock)
         return
     lock := GameplayLock
+    ReleaseGameplayMouseClip(lock)
     GameplayLock := 0
     if lock.Native && !DllCall("user32\BlockInput", "Int", false, "Int")
         LogEvent("Windows input unlock returned " A_LastError)
@@ -68,6 +69,48 @@ CloseGameplayInputLock() {
         CallbackFree(lock.KeyProc)
     if lock.MouseProc
         CallbackFree(lock.MouseProc)
+}
+
+RefreshGameplayMouseLock() {
+    global GameplayLock, InputLockOwners
+    lock := GameplayLock
+    if !IsObject(lock)
+        return
+    for owner in InputLockOwners {
+        if owner.P.Action = "Random Loadout" {
+            ReleaseGameplayMouseClip(lock)
+            return
+        }
+    }
+    if !WinActive("ahk_id " lock.Target)
+        return
+    current := Buffer(16, 0)
+    if !DllCall("user32\GetClipCursor", "Ptr", current, "Int")
+        return
+    if IsObject(lock.Anchor) && SameMouseClip(current, lock.Anchor)
+        return
+    point := Buffer(8, 0)
+    if !DllCall("user32\GetCursorPos", "Ptr", point, "Int")
+        return
+    x := NumGet(point, 0, "Int"), y := NumGet(point, 4, "Int")
+    anchor := Buffer(16, 0)
+    NumPut("Int", x, "Int", y, "Int", x + 1, "Int", y + 1, anchor)
+    if DllCall("user32\ClipCursor", "Ptr", anchor, "Int")
+        lock.PreviousClip := current, lock.Anchor := anchor
+}
+
+ReleaseGameplayMouseClip(lock) {
+    if !IsObject(lock.Anchor)
+        return
+    current := Buffer(16, 0)
+    if DllCall("user32\GetClipCursor", "Ptr", current, "Int") && SameMouseClip(current, lock.Anchor)
+        DllCall("user32\ClipCursor", "Ptr", lock.PreviousClip, "Int")
+    lock.Anchor := 0
+    lock.PreviousClip := 0
+}
+
+SameMouseClip(a, b) {
+    return NumGet(a, 0, "Int64") = NumGet(b, 0, "Int64") && NumGet(a, 8, "Int64") = NumGet(b, 8, "Int64")
 }
 
 GameplayKeyboardHook(code, message, data) {

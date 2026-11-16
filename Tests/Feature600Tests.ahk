@@ -5,6 +5,11 @@
 #Include ..\Lib\ActivityOptions.ahk
 #Include ..\Lib\AltTab.ahk
 #Include ..\Lib\Effects.ahk
+#Include ..\Lib\Sonion.ahk
+#Include ..\Lib\SonionScream.ahk
+#Include ..\Lib\SonionGlitch.ahk
+#Include ..\Lib\Draw.ahk
+#Include ..\Lib\GlitchWheel.ahk
 #Include ..\Lib\GameplayInput.ahk
 #Include ..\Lib\Sensitivity.ahk
 #Include ..\Lib\MacroCodec.ahk
@@ -100,14 +105,18 @@ try {
     CancelEffects()
     TestVbsRewards()
     TestGameplayInput()
+    TestFeature603(p1, p2)
     Check(DirectArguments(5, 'C:\Meso Control\Meso_Wheel_Trigger.vbs') = '//B //NoLogo "C:\Meso Control\Meso_Wheel_Trigger.vbs" --direct 5 %userName%', "Copied Streamer.bot arguments preserve the quoted path")
     state := Line("meta", 1, 1, 2000) Line("status", 0, 0, 0) Line("wheel", "idle", "", 0, 0, "", 0, 0)
     state .= Line("slots", "idle", "", 0, 0, 0, 0, 0, "", "", "", "") Line("timer", "idle", 0, 0, 0)
     state .= Line("active", "Screen Shuffle", 3000, "Active", 2000) Line("active", "Lights Out", 4000, "Active", 2000)
+    state .= Line("bonus", "Tunnel Vision", 2000) Line("glitch", 2500, 9500)
     parsed := ParseOutputState(state)
+    Check(parsed.Bonus = "Tunnel Vision" && parsed.GlitchEnd = 9500, "OBS receives the bonus and glitch animation")
+    Check(OutputPanelKeys(parsed, 2600)[1] != OutputPanelKeys(parsed, 2650)[1], "Glitch animation refreshes the wheel panel")
     Check(parsed.ActiveItems.Length = 2, "Both effects reach the OBS state")
     Check(OutputPanelKeys(parsed, 3100)[3] != "idle", "Second OBS effect outlasts first")
-    FileAppend("PASS " checks " Meso Control 6.0.2 checks`n", "*")
+    FileAppend("PASS " checks " Meso Control 6.0.3 checks`n", "*")
 } catch as err {
     FileAppend("FAIL: " err.Message " (" err.File ":" err.Line ")`n", "*")
     ExitApp(1)
@@ -169,12 +178,67 @@ TestGameplayInput() {
     Check(SensitivityMultiplier({Action: "Change Mouse Sensitivity", Vary: false, Value: 1.5}) = 1.5, "Fixed sensitivity preserves 1.5x")
     Check(SensitivityMultiplier({Action: "Change Mouse Sensitivity", Vary: false, Value: 0.5}) = 0.5, "Fixed sensitivity preserves 0.5x")
     Check(PunishmentValueRange("Lights Out").Max = 240 && PunishmentValueRange("Lights Out").Min = 100, "Lights Out shows its previous range")
-    Check(PunishmentValueRange("Tunnel Vision").Min = 1.1 && PunishmentValueRange("Tunnel Vision").Max = 4, "Tunnel Vision shows its previous range")
-    Check(FixedPunishmentValue({Action: "Wide View", Value: 3}) = 0.95, "Wide View uses its supported upper limit")
+    Check(PunishmentValueRange("Tunnel Vision").Min = 1.1 && PunishmentValueRange("Tunnel Vision").Max = 8, "Tunnel Vision supports zoom beyond 4x")
+    Check(FixedPunishmentValue({Action: "Wide View", Value: 3}) = 0.25, "Wide View uses its supported upper limit")
     Check(FixedPunishmentValue({Action: "Change Mouse Sensitivity", Value: 10}) = 5, "Manual sensitivity uses its supported upper limit")
     visual := FileRead(A_ScriptDir "\..\Meso_Visual_Effect.ahk", "UTF-8")
     Check(InStr(visual, 'MagShowSystemCursor", "Int", false') && InStr(visual, 'MagShowSystemCursor", "Int", true'), "Wide View hides and restores the system cursor")
     TestInputHooks()
+}
+
+TestFeature603(p1, p2) {
+    global RuntimeDir, Rounds, Sonion, SettingsGui, SettingsLV, DirectSlotControls, ConfigFile, ActiveEffects, EditorBindHook, SharedBindHook
+    tunnel := {Action: "Tunnel Vision", Value: 9}
+    Check(VisualStrength(tunnel, 1) = 3 && VisualStrength(tunnel, 3) > 4 && VisualStrength(tunnel, 20) = 8, "Tunnel Vision starts at 3x and progresses up to 8x")
+    Check(VisualStrength({Action: "Wide View", Value: 1}, 1) = 0.25 && VisualStrength({Action: "Wide View", Value: 0.01}, 20) = 0.05, "Wide View starts at 0.25x and ends at 0.05x")
+    Check(VisualStrength({Action: "Drunk Vision", Value: 0}, 0) = 3 && VisualStrength({Action: "Drunk Vision", Value: 9}, 0) = 5, "Drunk Vision sway defaults to 3 and caps at 5")
+    alt := {Action: "Alt+Enter", Value: 0}
+    Check(FixedPunishmentValue(alt) = 1, "Alt+Enter defaults to one second between presses")
+    alt.Value := 0.8
+    Check(FixedPunishmentValue(alt) = 0.8, "Alt+Enter accepts a custom interval")
+    loop IniRead(ConfigFile, "Punishments", "Count", "0") + 0 {
+        section := "P" A_Index
+        if IniRead(ConfigFile, section, "Action", "") = "Alt+Enter" {
+            Check(IniRead(ConfigFile, section, "Duration") = "5", "New Alt+Enter default is 5 seconds")
+            IniWrite("3", ConfigFile, section, "Duration")
+            IniWrite("0", ConfigFile, section, "Value")
+            IniDelete(ConfigFile, "Meta", "Feature603")
+            LoadAndMigratePunishments()
+            Check(IniRead(ConfigFile, section, "Duration") = "5", "Old Alt+Enter default upgrades to 5 seconds")
+            IniWrite("3", ConfigFile, section, "Duration")
+            LoadAndMigratePunishments()
+            Check(IniRead(ConfigFile, section, "Duration") = "3", "A later custom duration is preserved")
+            break
+        }
+    }
+    EditorBindHook := 0, SharedBindHook := 0
+    SettingsGui := Gui()
+    SettingsLV := 0
+    DirectSlotControls := [SettingsGui.AddDropDownList("w150")]
+    RefreshDirectSlots()
+    CloseSettings()
+    RefreshDirectSlots()
+    Check(!DirectSlotControls.Length && !GuiHwndSafe(SettingsGui), "Profile refresh after Settings closes ignores destroyed dropdowns")
+    Rounds := LoadRoundSettings()
+    Check(!Rounds.BonusPunishment, "Bonus punishment defaults off")
+    Rounds.BonusPunishment := true
+    job := {Id: "bonus-test", Preview: true, Spins: 1}
+    PrepareSpin(job, [p1, p2], 1000)
+    LandSpin(job, 9000)
+    Check(job.HasOwnProp("Bonus") && job.Bonus.Name != job.P.Name && ActiveEffects.Length = 2, "A bonus landing adds one distinct punishment")
+    Check(ActiveEffects[1].Start = ActiveEffects[2].Start, "Both bonus effects start together")
+    CancelEffects()
+    ScheduleSonion(1, 2000)
+    Check(Sonion.Next = 7000 && Sonion.Replies = 0 && SonionQuestion() = "When the onion rings... Do you answer?", "The Sonion chat sequence starts five seconds after the question")
+    ScheduleSonion(2, 3000)
+    Check(Sonion.Target = 1, "A pending Sonion call cannot be replaced")
+    StopSonion()
+    Check(!IsObject(Sonion), "Sonion cleans up when cancelled")
+    wave := FileOpen(SonionMediaFile(RuntimeDir, "321.wav"), "r")
+    try Check(wave.Read(4) = "RIFF" && wave.Length > 90000, "The packaged 321.wav decodes as WAVE")
+    finally wave.Close()
+    Check(FileGetSize(SonionMediaFile(RuntimeDir, "glitch.mp3")) > 20000, "The packaged glitch track decodes")
+    Check(FileExist(A_ScriptDir "\..\Ui\sonion_jeff.png") != "", "Jeff image is packaged")
 }
 
 TestInputHooks() {

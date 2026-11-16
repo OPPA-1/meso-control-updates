@@ -6,6 +6,11 @@
 #Include Lib\ActivityOptions.ahk
 #Include Lib\AltTab.ahk
 #Include Lib\Effects.ahk
+#Include Lib\Sonion.ahk
+#Include Lib\SonionScream.ahk
+#Include Lib\SonionGlitch.ahk
+#Include Lib\Draw.ahk
+#Include Lib\GlitchWheel.ahk
 #Include Lib\GameplayInput.ahk
 #Include Lib\Sensitivity.ahk
 #Include Lib\MacroCodec.ahk
@@ -61,6 +66,7 @@ OutputManagementBusy := false
 Guides := false
 Queue := SpinQueue()
 Rounds := LoadRoundSettings()
+Sonion := 0
 Chat := LoadChatSettings()
 ChatBridgeStatus := "Waiting for Twitch chat"
 CapturePad := 0
@@ -470,8 +476,10 @@ OpenQueueMenu(*) {
 }
 
 SetText(control, value) {
-    if IsObject(control) && control.Text != value
-        control.Text := value
+    try {
+        if IsObject(control) && control.Text != value
+            control.Text := value
+    }
 }
 
 IsMesoFocused() {
@@ -689,10 +697,15 @@ EngineTick() {
             elapsed := now - job.Start
             if elapsed >= 5000 && job.Phase = "spin"
                 job.Phase := "hold"
-            if elapsed >= 8000 && job.Phase = "hold"
+            if elapsed >= 8000 && job.Phase = "hold" && SonionGlitchRoom(SpinEffectCount(job))
                 LandSpin(job, now)
         }
         AdvanceEffect(now)
+        try AdvanceSonion(now)
+        catch as err {
+            LogEvent("Sonion sequence: " err.Message)
+            StopSonion()
+        }
         if IsObject(Queue.Active) && Queue.Active.Phase = "result" && now >= Queue.Active.VisualUntil && !HasEffects(Queue.Active.Id) {
             if !Queue.Active.Preview
                 Rounds.Complete(now)
@@ -755,6 +768,8 @@ UpdateMainUi() {
     status := IsObject(Queue.Active) ? (Queue.Active.Phase = "announce" ? "Announcing" : Queue.Active.Phase = "spin" ? "Spinning" : Queue.Active.Phase = "hold" ? "Landed" : "Punishment") : (Queue.Paused ? "Queue paused" : WheelControllerEnabled ? "Ready" : "Controller off")
     if !IsObject(Queue.Active) && Rounds.Cooling(NowMs()) && WheelControllerEnabled
         status := "Cooldown " TimeText(Max(0, Rounds.CooldownUntil - NowMs()))
+    if IsObject(Queue.Active) && Queue.Active.HasOwnProp("Bonus") && NowMs() < Queue.Active.VisualUntil
+        status := "2×  + " Queue.Active.Bonus.Name
     SetText(WheelStateLabel, status)
     SetText(NowLabel, !HasEffects() && Rounds.Cooling(NowMs()) && WheelControllerEnabled ? "Next round in " TimeText(Max(0, Rounds.CooldownUntil - NowMs())) : EffectUiText())
     spinning := Slots.Phase = "spin"
@@ -1106,7 +1121,7 @@ ExistingStreamOutputPid() {
 }
 
 PublishState(force := false) {
-    global Queue, Clock, Slots, ActiveEffects, Guides, LastPublished, LastPublishTick, PublisherRevision, RuntimeDir, ScoreVisible, MesoScore, ChatScore, HorrorEvents, ViewerVisible, WheelDisplayMode, TtsEnabled
+    global Queue, Clock, Slots, ActiveEffects, Guides, LastPublished, LastPublishTick, PublisherRevision, RuntimeDir, ScoreVisible, MesoScore, ChatScore, HorrorEvents, ViewerVisible, WheelDisplayMode, TtsEnabled, Sonion
     now := NowMs()
     body := Line("status", Queue.Count(), Queue.Paused, Guides)
     body .= Line("score", ScoreVisible ? 1 : 0, MesoScore, ChatScore)
@@ -1118,8 +1133,12 @@ PublishState(force := false) {
             body .= Line("item", p.Name, p.Weight)
         if j.HasOwnProp("FirstResult") && phase != "idle"
             body .= Line("first", j.FirstResult.Name)
+        if j.HasOwnProp("Bonus") && phase = "result"
+            body .= Line("bonus", j.Bonus.Name, j.BonusStart)
     } else
         body .= Line("wheel", "idle", "", 0, 0, "", 0, 0, "", ViewerVisible ? 1 : 0, WheelDisplayMode, TtsEnabled ? 1 : 0)
+    if IsObject(Sonion) && Sonion.Phase = "glitch"
+        body .= Line("glitch", Sonion.Start, Sonion.Deadline)
     body .= Line("slots", Slots.Phase, Slots.Id, Slots.Start, Slots.Mode, Slots.Reel, Slots.Locked, Slots.HoldUntil, Slots.Values*)
     for i, pool in Slots.Pools
         body .= Line("pool", i, pool*)

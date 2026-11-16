@@ -6,6 +6,7 @@ ChooseChatPhrase() {
         "Drake is my favorite Artist!",
         "Chat is better than me.",
         "he is coming..",
+        SonionQuestion(),
         "Soggy cereal is vastly superior to crunchy cereal.",
         "The middle seat on an airplane is the premium spot.",
         "Wet socks aren't actually that bad.",
@@ -532,9 +533,9 @@ AdvanceOneEffect(now) {
             }
             Effect.Next := Effect.End
         case "Spin 360":
-            dx := Round(p.Value > 0 ? p.Value : 180)
-            DllCall("user32\mouse_event", "UInt", 1, "Int", dx, "Int", 0, "UInt", 0, "UPtr", 0)
-            Effect.Next := now + 16
+            dx := Round(7 * Max(1, Min(1500, p.Value > 0 ? p.Value : 180)))
+            SendGameplayMouse(dx, 0, 1)
+            Effect.Next := now + 10
         case "Look Down + Shoot":
             if Effect.Step < 12 {
                 DllCall("user32\mouse_event", "UInt", 1, "Int", 0, "Int", 120, "UInt", 0, "UPtr", 0)
@@ -638,8 +639,10 @@ AdvanceOneEffect(now) {
                 }
                 Effect.Step := 1
             }
-            Pulse("Enter", now, 35)
-            Effect.Next := now + 125
+            if Pulse("Enter", now, 35)
+                Effect.Next := now + Round(FixedPunishmentValue(p) * 1000)
+            else
+                Effect.Next := now + 50
         case "Send Chat":
             if Effect.Step = 0 {
                 if !Pulse(SimpleKey(first, "Enter"), now, 35)
@@ -673,6 +676,8 @@ AdvanceOneEffect(now) {
                     return
                 if Effect.Note = "he is coming.."
                     ScheduleHorror(now + 15000)
+                else if Effect.Note = SonionQuestion()
+                    ScheduleSonion(Effect.Target, now)
                 Effect.Step := 3
                 Effect.Next := Effect.End
             }
@@ -716,7 +721,10 @@ AdvanceOneEffect(now) {
                 Pulse(drift, now, 160)
             }
             Effect.Next := now + Random(190, 390)
-        case "Lights Out", "Tunnel Vision", "Wide View", "Screen Shuffle", "Invert Screen", "Turn M&K Off", "Change Mouse Sensitivity":
+        case "Turn M&K Off":
+            RefreshGameplayMouseLock()
+            Effect.Next := now + 15
+        case "Lights Out", "Tunnel Vision", "Wide View", "Screen Shuffle", "Invert Screen", "Change Mouse Sensitivity":
             Effect.Next := now + 50
     }
 }
@@ -733,6 +741,7 @@ HasEffects(owner := "") {
 
 CancelEffects(reason := "") {
     global ActiveEffects
+    StopSonion()
     for item in ActiveEffects.Clone()
         WithEffect(item, FinishEffect, reason)
 }

@@ -110,11 +110,11 @@ DefaultPunishments() {
         {Name: "Tunnel Vision", Enabled: true, Duration: 8, Weight: 2, Action: "Tunnel Vision", Keys: "", Value: 2},
         {Name: "Screen Shuffle", Enabled: true, Duration: 8, Weight: 2, Action: "Screen Shuffle", Keys: "", Value: 0},
         {Name: "Invert Screen", Enabled: true, Duration: 8, Weight: 2, Action: "Invert Screen", Keys: "", Value: 0},
-        {Name: "Drunk Vision", Enabled: true, Duration: 8, Weight: 2, Action: "Drunk Vision", Keys: "", Value: 0},
+        {Name: "Drunk Vision", Enabled: true, Duration: 8, Weight: 2, Action: "Drunk Vision", Keys: "", Value: 3},
         {Name: "Loadout Roulette", Enabled: true, Duration: 7, Weight: 4, Action: "Random Loadout", Keys: "", Value: 12},
         {Name: "Turn M&K Off", Enabled: true, Duration: 5, Weight: 4, Action: "Turn M&K Off", Keys: "", Value: 0},
-        {Name: "Alt+Enter", Enabled: true, Duration: 3, Weight: 3, Action: "Alt+Enter", Keys: "", Value: 0},
-        {Name: "Wide View", Enabled: true, Duration: 8, Weight: 2, Action: "Wide View", Keys: "", Value: 0.75},
+        {Name: "Alt+Enter", Enabled: true, Duration: 5, Weight: 3, Action: "Alt+Enter", Keys: "", Value: 1},
+        {Name: "Wide View", Enabled: true, Duration: 8, Weight: 2, Action: "Wide View", Keys: "", Value: 0.25},
         {Name: "Change Mouse Sensitivity", Enabled: true, Duration: 8, Weight: 3, Action: "Change Mouse Sensitivity", Keys: "", Value: 0.5, Vary: true},
         {Name: "Chat Takes Control", Enabled: true, Duration: 30, Weight: 5, Action: "Chat Control", Keys: "", Value: 0}
     ]
@@ -129,7 +129,8 @@ LoadAndMigratePunishments() {
     defaults := DefaultPunishments()
     path := PunishmentProfilePath()
     migrating := IniRead(path, "Meta", "Schema", "0") != "3"
-    needsSave := migrating
+    legacyTiming := IniRead(path, "Meta", "Feature603", "0") != "1"
+    needsSave := migrating || legacyTiming
     count := IniRead(path, "Punishments", "Count", "0") + 0
     result := []
     exists := Map()
@@ -165,6 +166,8 @@ LoadAndMigratePunishments() {
         }
         weight := IniRead(path, section, "Weight", "5")
         value := IniRead(path, section, "Value", "0")
+        if legacyTiming && action = "Alt+Enter" && name = "Alt+Enter" && duration = 3 && value = 0
+            duration := 5
         p := {Name: name, Enabled: IniRead(path, section, "Enabled", "1") = "1", Duration: IsNumber(duration) ? Max(0.1, Min(300, Float(duration))) : 3, Weight: IsNumber(weight) ? Max(0, Min(100, Float(weight))) : 5, Action: action, Keys: keys, Value: IsNumber(value) ? Float(value) : 0, Vary: IniRead(path, section, "Vary", action = "Change Mouse Sensitivity" ? "1" : "0") = "1", Grid: PunishmentGrid(IniRead(path, section, "Grid", "2x3"))}
         result.Push(p)
         exists[action] := true
@@ -253,6 +256,7 @@ SavePunishmentList(list, profile := "") {
         IniWrite("1", staged, "Meta", "Feature520")
         IniWrite("1", staged, "Meta", "Feature522")
         IniWrite("1", staged, "Meta", "Feature600")
+        IniWrite("1", staged, "Meta", "Feature603")
         CommitIniFile(staged, path)
         return true
     } finally {
@@ -500,35 +504,48 @@ StopSequence(*) {
 }
 
 CloseSettings(*) {
-    global SettingsGui, SettingsLV, SelectedEditorIndex
-    StopEditorKeyCapture()
-    StopSharedKeyCapture()
-    g := SettingsGui
-    SettingsGui := 0
-    SettingsLV := 0
-    SelectedEditorIndex := 0
-    if IsObject(g)
-        try g.Destroy()
+    global SettingsGui, SettingsLV, SelectedEditorIndex, DirectSlotControls
+    previousCritical := A_IsCritical
+    Critical("On")
+    try {
+        StopEditorKeyCapture()
+        StopSharedKeyCapture()
+        g := SettingsGui
+        SettingsGui := 0
+        SettingsLV := 0
+        SelectedEditorIndex := 0
+        DirectSlotControls := []
+        if IsObject(g)
+            try g.Destroy()
+    } finally Critical(previousCritical)
 }
 
 RefreshSettingsList() {
     global SettingsGui, SettingsLV, Punishments
     if !GuiHwndSafe(SettingsGui) || !IsObject(SettingsLV)
         return
-    SettingsLV.Opt("-Redraw")
+    list := SettingsLV
+    previousCritical := A_IsCritical
+    Critical("On")
     try {
-        SettingsLV.Delete()
+        if !GuiHwndSafe(SettingsGui) || list != SettingsLV
+            return
+        list.Opt("-Redraw")
+        list.Delete()
         for p in Punishments {
             keys := SharedKeysForAction(p.Action, KeyTokens(p.Keys))
-            SettingsLV.Add("", p.Enabled ? "Yes" : "No", p.Name, p.Duration, p.Weight, p.Action, keys.Length ? JoinKeys(keys) : p.Keys)
+            list.Add("", p.Enabled ? "Yes" : "No", p.Name, p.Duration, p.Weight, p.Action, keys.Length ? JoinKeys(keys) : p.Keys)
         }
-    } finally SettingsLV.Opt("+Redraw")
+    } finally {
+        try list.Opt("+Redraw")
+        Critical(previousCritical)
+    }
     RefreshDirectSlots()
 }
 
 EditorRowSelected(control, index, selected) {
-    global SelectedEditorIndex, Punishments, EditorName, EditorEnabled, EditorDuration, EditorWeight, EditorAction, EditorKeys, EditorValue, EditorVary, EditorGrid, EditorRawKeys
-    if !selected || index < 1 || index > Punishments.Length
+    global SettingsLV, SelectedEditorIndex, Punishments, EditorName, EditorEnabled, EditorDuration, EditorWeight, EditorAction, EditorKeys, EditorValue, EditorVary, EditorGrid, EditorRawKeys
+    if !IsObject(SettingsLV) || SettingsLV != control || !selected || index < 1 || index > Punishments.Length
         return
     SelectedEditorIndex := index
     p := Punishments[index]
@@ -552,12 +569,14 @@ EditorRowSelected(control, index, selected) {
 }
 
 UpdateEditorHint(*) {
-    global EditorAction, EditorKeys, EditorKeyLabel, EditorBindButton, EditorValue, EditorValueLabel, EditorVary, EditorGrid, EditorRange, RawAccelButton
+    global EditorAction, EditorKeys, EditorKeyLabel, EditorBindButton, EditorValue, EditorValueLabel, EditorVary, EditorGrid, EditorRange, RawAccelButton, SettingsGui
+    if !GuiHwndSafe(SettingsGui)
+        return
     action := EditorAction.Text
     global EditorRawKeys
     shared := SharedKeysForAction(action, KeyTokens(EditorRawKeys))
     hasKeys := shared.Length || InStr("|Spam Key|Exit Desktop|Return to Orbit|Send Chat|Custom Sequence|Recorded Sequence|", "|" action "|")
-    valueLabels := Map("Spam Crouch", "Pulse ms", "Exit Desktop", "Delay ms", "Spin 360", "Step", "Lights Out", "Darkness", "Tunnel Vision", "Zoom", "Wide View", "Scale", "Screen Shuffle", "Grid", "Random Loadout", "Slots", "Change Mouse Sensitivity", "Multiplier")
+    valueLabels := Map("Spam Crouch", "Pulse ms", "Exit Desktop", "Delay ms", "Spin 360", "Step", "Lights Out", "Darkness", "Tunnel Vision", "Zoom", "Wide View", "Scale", "Screen Shuffle", "Grid", "Random Loadout", "Slots", "Change Mouse Sensitivity", "Multiplier", "Alt+Enter", "Gap (sec)", "Drunk Vision", "Sway")
     variable := InStr("|Lights Out|Tunnel Vision|Wide View|Screen Shuffle|Change Mouse Sensitivity|", "|" action "|") > 0
     EditorVary.Visible := variable
     EditorVary.Text := action = "Screen Shuffle" || action = "Change Mouse Sensitivity" ? "Random" : "Progressive"

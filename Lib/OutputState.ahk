@@ -1,5 +1,5 @@
 ﻿EmptyState() {
-    return {Pid: 0, Revision: 0, PublishedAt: 0, Wheel: ["wheel", "idle", "", "0", "0", "", "0", "0", "", "1", "wheel", "0"], DisplayMode: "wheel", Items: [], Slots: ["slots", "idle", "", "0", "0", "0", "0", "0", "", "", "", ""], Pools: Map(), Timer: ["timer", "idle", "0", "0", "0"], Active: ["active", "", "0", "", "0"], ActiveItems: [], FirstResult: "", Queue: 0, Paused: false, Guides: false, Score: ["score", "0", "0", "0"], HorrorEvents: []}
+    return {Pid: 0, Revision: 0, PublishedAt: 0, Wheel: ["wheel", "idle", "", "0", "0", "", "0", "0", "", "1", "wheel", "0"], DisplayMode: "wheel", Items: [], Slots: ["slots", "idle", "", "0", "0", "0", "0", "0", "", "", "", ""], Pools: Map(), Timer: ["timer", "idle", "0", "0", "0"], Active: ["active", "", "0", "", "0"], ActiveItems: [], FirstResult: "", Bonus: "", BonusStart: 0, GlitchStart: 0, GlitchEnd: 0, Queue: 0, Paused: false, Guides: false, Score: ["score", "0", "0", "0"], HorrorEvents: []}
 }
 
 RequireOutputFields(fields, count, tag) {
@@ -105,6 +105,14 @@ ParseOutputState(data) {
             case "first":
                 RequireOutputFields(f, 2, tag)
                 next.FirstResult := f[2]
+            case "bonus":
+                RequireOutputFields(f, 3, tag)
+                next.Bonus := f[2]
+                next.BonusStart := RequireOutputNumber(f[3], tag)
+            case "glitch":
+                RequireOutputFields(f, 3, tag)
+                next.GlitchStart := RequireOutputNumber(f[2], tag)
+                next.GlitchEnd := RequireOutputNumber(f[3], tag)
             case "horror":
                 RequireOutputFields(f, 3, tag)
                 if f[2] = ""
@@ -131,7 +139,11 @@ OutputPanelKeys(state, now) {
     slots := state.Slots
     active := state.Active
     timer := state.Timer
-    wheelKey := Line(wheel*) "|" state.FirstResult
+    wheelKey := Line(wheel*) "|" state.FirstResult "|" state.Bonus
+    if state.Bonus != "" && now - state.BonusStart < 460
+        wheelKey .= "|bonus:" Floor(now / 16)
+    if state.GlitchEnd > now
+        wheelKey .= "|glitch:" Floor(now / 34)
     for p in state.Items
         wheelKey .= Line(p.Name, p.Weight)
     if wheel[2] = "spin"

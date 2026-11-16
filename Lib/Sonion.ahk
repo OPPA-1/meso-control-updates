@@ -1,0 +1,310 @@
+﻿SonionQuestion() {
+    return "When the onion rings... Do you answer?"
+}
+
+ScheduleSonion(target, now) {
+    global Sonion
+    if !IsObject(Sonion)
+        Sonion := {Target: target, Phase: "reply", Next: now + 5000, Step: 0, Replies: 0, Dim: 0, Panel: 0, Sound: false}
+}
+
+AdvanceSonion(now) {
+    global Sonion, InputLockOwners
+    if !IsSet(Sonion) || !IsObject(Sonion)
+        return
+    call := Sonion
+    if !WinActive("ahk_id " call.Target) {
+        StopSonion()
+        return
+    }
+    if now < call.Next
+        return
+    switch call.Phase {
+        case "reply":
+            if !InputLockOwners.Count
+                AdvanceSonionReply(call, now)
+        case "waiting":
+            if !InputLockOwners.Count
+                ShowSonionPhone(call, now)
+        case "ringing":
+            if now >= call.Deadline {
+                StopSonion()
+                return
+            }
+            ShakeSonionPhone(call, now)
+        case "answered":
+            if GuiHwndSafe(call.Panel) && now >= call.HideAt
+                CloseSonionWindows(call)
+            if now >= call.Deadline
+                StopSonion()
+            else
+                call.Next := now + 60
+        case "declined":
+            StartSonionGlitch(call, now)
+        case "glitch":
+            if now >= call.Deadline
+                StopSonion()
+            else
+                UpdateSonionGlitch(call, now)
+    }
+}
+
+AdvanceSonionReply(call, now) {
+    switch call.Step {
+        case 0:
+            SendEvent("{Enter}")
+            call.Step := 1
+            call.Next := now + 180
+        case 1:
+            saved := ClipboardAll()
+            A_Clipboard := "yes"
+            call.Clipboard := saved
+            call.ClipboardSequence := DllCall("user32\GetClipboardSequenceNumber", "UInt")
+            SendEvent("^v")
+            call.Step := 2
+            call.Next := now + 110
+        case 2:
+            RestoreEffectClipboard(call)
+            SendEvent("{Enter}")
+            call.Replies += 1
+            call.Step := 0
+            if call.Replies = 3 {
+                call.Phase := "waiting"
+                call.Next := now + Random(10000, 30000)
+            } else
+                call.Next := now + 220
+    }
+}
+
+SonionBounds(call) {
+    WinGetClientPos(&x, &y, &w, &h, "ahk_id " call.Target)
+    return {X: x, Y: y, W: w, H: h}
+}
+
+ShowSonionPhone(call, now) {
+    b := SonionBounds(call)
+    call.Dim := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000020 -DPIScale", "Meso Visual Effect: Darkness")
+    call.Dim.BackColor := "050208"
+    call.Dim.Show("NA x" b.X " y" b.Y " w" b.W " h" b.H)
+    WinSetTransparent(240, "ahk_id " call.Dim.Hwnd)
+    call.X := b.X + (b.W - 306) // 2
+    call.Y := b.Y + (b.H - 506) // 2
+    phone := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000000 -DPIScale", "Sonion")
+    call.Panel := phone
+    phone.BackColor := "AC7ACA"
+    phone.AddText("x5 y4 w296 h498 Background21162E", "")
+    phone.AddText("x12 y12 w282 h482 Background2E1D50", "")
+    phone.AddText("x12 y345 w282 h147 Background37245F", "")
+    phone.AddText("x107 y19 w92 h23 Background100A1C", "")
+    phone.SetFont("s10 Bold cE9D7F8", "Segoe UI")
+    phone.AddText("x32 y26 w63 h20 BackgroundTrans", "9:41")
+    phone.AddText("x218 y26 w56 h20 Right BackgroundTrans", "● ● ●")
+    phone.AddText("x34 y77 w238 h28 Center BackgroundTrans", "INCOMING CALL")
+    phone.SetFont("s43", "Segoe UI Emoji")
+    phone.AddText("x83 y112 w140 h103 Center Background714A98 +0x200", "🧅")
+    phone.SetFont("s28 Bold cFFFFFF", "Segoe UI")
+    phone.AddText("x26 y229 w254 h59 Center BackgroundTrans", "Sonion")
+    phone.SetFont("s11 Norm cCBB1EC", "Segoe UI")
+    phone.AddText("x29 y293 w248 h29 Center BackgroundTrans", "Ringing…")
+    phone.SetFont("s11 Bold", "Segoe UI")
+    phone.AddButton("x31 y394 w113 h49", "Decline").OnEvent("Click", AnswerSonion.Bind(false))
+    phone.AddButton("x162 y394 w113 h49 Default", "Answer").OnEvent("Click", AnswerSonion.Bind(true))
+    phone.AddText("x108 y475 w90 h4 BackgroundDBC3F5", "")
+    phone.Show("NA x" call.X " y" call.Y " w306 h506")
+    WinSetRegion("0-0 w306 h506 R55-55", "ahk_id " phone.Hwnd)
+    call.PhoneClip := 0
+    call.Phase := "ringing"
+    call.Deadline := now + 30000
+    call.Next := now
+}
+
+ShakeSonionPhone(call, now) {
+    global InputLockOwners
+    if !InputLockOwners.Count {
+        clip := Buffer(16, 0), screen := Buffer(16, 0)
+        left := SysGet(76), top := SysGet(77)
+        NumPut("Int", left, "Int", top, "Int", left + SysGet(78), "Int", top + SysGet(79), screen)
+        if DllCall("user32\GetClipCursor", "Ptr", clip, "Int") && !SameMouseClip(clip, screen) {
+            if DllCall("user32\ClipCursor", "Ptr", 0, "Int")
+                call.PhoneClip := clip, call.PhoneScreen := screen
+        }
+    }
+    cursor := Buffer(8, 0)
+    DllCall("user32\GetCursorPos", "Ptr", cursor)
+    x := NumGet(cursor, 0, "Int"), y := NumGet(cursor, 4, "Int")
+    inside := Abs(x - (call.X + 153)) <= 163 && Abs(y - (call.Y + 253)) <= 271
+    dx := Round((inside ? 2 : 12) * Sin(now / 47))
+    dy := Round((inside ? 1 : 7) * Sin(now / 29))
+    DllCall("user32\SetWindowPos", "Ptr", call.Panel.Hwnd, "Ptr", -1, "Int", call.X + dx, "Int", call.Y + dy, "Int", 0, "Int", 0, "UInt", 0x11)
+    call.Next := now + 38
+}
+
+AnswerSonion(answer, *) {
+    global Sonion
+    if !IsObject(Sonion) || Sonion.Phase != "ringing"
+        return
+    previousCritical := A_IsCritical
+    Critical("On")
+    try {
+        call := Sonion
+        if !WinActive("ahk_id " call.Target) && !WinActive("ahk_id " GuiHwndSafe(call.Panel)) {
+            StopSonion()
+            return
+        }
+        if !WinActive("ahk_id " call.Target)
+            try WinActivate("ahk_id " call.Target)
+        CloseSonionWindows(call)
+        now := NowMs()
+        if answer {
+            call.Phase := "answered"
+            call.Next := now
+            call.HideAt := now + 3200
+            call.Deadline := now + 12000
+            PlaySonionSound(call, "321.wav")
+            ShowSonionScare(call)
+        } else {
+            call.Phase := "declined"
+            call.Next := now + 5000
+        }
+    } catch as err {
+        LogEvent("Sonion response: " err.Message)
+        StopSonion()
+    } finally Critical(previousCritical)
+}
+
+ShowSonionScare(call) {
+    b := SonionBounds(call)
+    g := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000020 -DPIScale", "Sonion")
+    call.Panel := g
+    g.BackColor := "08050C"
+    w := Min(b.W, Round(b.H * 1.765))
+    h := Round(w / 1.765)
+    g.AddPicture("x" (b.W - w)//2 " y" (b.H - h)//2 " w" w " h" h, A_ScriptDir "\Ui\sonion_jeff.png")
+    g.Show("NA x" b.X " y" b.Y " w" b.W " h" b.H)
+}
+
+StartSonionGlitch(call, now) {
+    global ActiveEffects, Clock, SonionGlitchId
+    call.Phase := "glitch"
+    call.Start := now
+    call.Deadline := now + 7000
+    call.Id := NewId()
+    SonionGlitchId := call.Id
+    selected := []
+    choices := EligiblePunishments()
+    while choices.Length && ActiveEffects.Length < 3 {
+        p := choices.RemoveAt(WeightedPick(choices))
+        if p.Action = "Send Chat" || !CompatibleWheelPick(p, selected) || !CompatibleActivePick(p, ActiveEffects)
+            continue
+        candidate := p.Clone()
+        candidate.TimerGeneration := Clock.Generation
+        selected.Push(candidate)
+        StartEffect(candidate, false, now, call.Id)
+    }
+    PlaySonionSound(call, "glitch.mp3")
+    ShowSonionGlitch(call, now)
+    PublishState(true)
+}
+
+SonionGlitchRoom(count) {
+    global ActiveEffects, SonionGlitchId
+    return !IsSet(SonionGlitchId) || !HasEffects(SonionGlitchId) || ActiveEffects.Length + count <= 3
+}
+
+ShowSonionGlitch(call, now) {
+    b := SonionBounds(call)
+    g := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08080020 -DPIScale", "Sonion")
+    call.Panel := g
+    call.GlitchToken := GdipStart()
+    call.GlitchSurface := Surface(360, 360)
+    call.X := b.X + Max(0, b.W - 385), call.Y := b.Y + 24
+    UpdateSonionGlitch(call, now)
+    g.Show("NA x" call.X " y" call.Y " w360 h360")
+}
+
+UpdateSonionGlitch(call, now) {
+    c := call.GlitchSurface
+    c.Clear(0xFF00FF00)
+    DrawGlitchWheel(c, 0, 0, now - call.Start)
+    c.Flush()
+    origin := Buffer(8, 0), size := Buffer(8, 0), source := Buffer(8, 0)
+    NumPut("Int", call.X, "Int", call.Y, origin)
+    NumPut("Int", 360, "Int", 360, size)
+    if !DllCall("user32\UpdateLayeredWindow", "Ptr", call.Panel.Hwnd, "Ptr", 0, "Ptr", origin, "Ptr", size,
+        "Ptr", c.DC, "Ptr", source, "UInt", 0x0000FF00, "Ptr", 0, "UInt", 1, "Int")
+        throw Error("Glitch wheel could not be painted (" A_LastError ")")
+    call.Next := now + 33
+}
+
+CompatibleActivePick(candidate, effects) {
+    for effect in effects
+        if !CompatibleWheelPick(candidate, [effect.P])
+            return false
+    return true
+}
+
+CloseSonionWindows(call) {
+    if call.HasOwnProp("PhoneClip") && IsObject(call.PhoneClip) && WinActive("ahk_id " call.Target) {
+        current := Buffer(16, 0)
+        if DllCall("user32\GetClipCursor", "Ptr", current, "Int") && SameMouseClip(current, call.PhoneScreen)
+            DllCall("user32\ClipCursor", "Ptr", call.PhoneClip, "Int")
+        call.PhoneClip := 0
+    }
+    for field in ["Panel", "Dim"] {
+        g := call.%field%
+        call.%field% := 0
+        if GuiHwndSafe(g)
+            try g.Destroy()
+    }
+}
+
+StopSonion() {
+    global Sonion
+    if !IsSet(Sonion) || !IsObject(Sonion)
+        return
+    call := Sonion
+    Sonion := 0
+    try RestoreEffectClipboard(call)
+    CloseSonionWindows(call)
+    if call.HasOwnProp("GlitchSurface")
+        call.GlitchSurface.Dispose()
+    if call.HasOwnProp("GlitchToken") {
+        token := call.GlitchToken
+        GdipStop(&token)
+    }
+    if call.Sound
+        DllCall("winmm\mciSendStringW", "WStr", "close mesosonion", "Ptr", 0, "UInt", 0, "Ptr", 0)
+}
+
+SonionMediaFile(dir, name) {
+    path := dir "\sonion-603-" name
+    data := name = "321.wav" ? SonionScreamData() : SonionGlitchData()
+    size := 0
+    if !DllCall("crypt32\CryptStringToBinaryW", "WStr", data, "UInt", 0, "UInt", 1, "Ptr", 0, "UInt*", &size, "Ptr", 0, "Ptr", 0, "Int")
+        throw Error("Sonion audio size could not be read")
+    bytes := Buffer(size)
+    if !DllCall("crypt32\CryptStringToBinaryW", "WStr", data, "UInt", 0, "UInt", 1, "Ptr", bytes, "UInt*", &size, "Ptr", 0, "Ptr", 0, "Int")
+        throw Error("Sonion audio could not be decoded")
+    audio := FileOpen(path, "w")
+    try audio.RawWrite(bytes, size)
+    finally audio.Close()
+    return path
+}
+
+PlaySonionSound(call, name) {
+    global RuntimeDir
+    try {
+        path := SonionMediaFile(RuntimeDir, name)
+        device := name = "321.wav" ? "waveaudio" : "mpegvideo"
+        cmd := "open " Chr(34) path Chr(34) " type " device " alias mesosonion"
+        status := DllCall("winmm\mciSendStringW", "WStr", cmd, "Ptr", 0, "UInt", 0, "Ptr", 0)
+        if status
+            throw Error("Windows audio open returned " status)
+        call.Sound := true
+        DllCall("winmm\mciSendStringW", "WStr", "setaudio mesosonion volume to 1000", "Ptr", 0, "UInt", 0, "Ptr", 0)
+        status := DllCall("winmm\mciSendStringW", "WStr", "play mesosonion from 0", "Ptr", 0, "UInt", 0, "Ptr", 0)
+        if status
+            throw Error("Windows audio playback returned " status)
+    } catch as err
+        LogEvent("Sonion audio: " err.Message)
+}

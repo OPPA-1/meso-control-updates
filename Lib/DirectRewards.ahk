@@ -54,7 +54,9 @@ DirectPunishment(slot, profile := "") {
 }
 
 RefreshDirectSlots() {
-    global DirectSlotControls, Punishments
+    global SettingsGui, DirectSlotControls, Punishments
+    if !IsSet(DirectSlotControls) || !DirectSlotControls.Length || !GuiHwndSafe(SettingsGui)
+        return
     choices := ["None"], names := Map()
     names.CaseSense := "Off"
     for p in Punishments {
@@ -63,28 +65,44 @@ RefreshDirectSlots() {
             names[p.Name] := choices.Length
         }
     }
-    for i, drop in DirectSlotControls {
-        p := DirectPunishment(i)
-        drop.Delete()
-        drop.Add(choices)
-        drop.Choose(IsObject(p) ? names[p.Name] : 1)
-    }
+    previousCritical := A_IsCritical
+    Critical("On")
+    try {
+        if !GuiHwndSafe(SettingsGui)
+            return
+        for i, drop in DirectSlotControls {
+            p := DirectPunishment(i)
+            drop.Delete()
+            drop.Add(choices)
+            drop.Choose(IsObject(p) ? names.Get(p.Name, 1) : 1)
+        }
+    } finally Critical(previousCritical)
 }
 
 SaveDirectSettings() {
-    global ConfigFile, DirectCooldownCheck, DirectBypassCooldown, DirectSlotControls
+    global ConfigFile, DirectCooldownCheck, DirectBypassCooldown, DirectSlotControls, SettingsGui
+    slots := []
+    previousCritical := A_IsCritical
+    Critical("On")
+    try {
+        if !GuiHwndSafe(SettingsGui)
+            return
+        for drop in DirectSlotControls
+            slots.Push(drop.Value > 1 ? drop.Text : "")
+        bypass := DirectCooldownCheck.Value
+    } finally Critical(previousCritical)
     path := PunishmentProfilePath()
     staged := StageIniFile(path)
     try {
-        for slot, drop in DirectSlotControls
-            IniWrite(drop.Value > 1 ? drop.Text : "", staged, "DirectRedeems", "Slot" slot)
+        for slot, name in slots
+            IniWrite(name, staged, "DirectRedeems", "Slot" slot)
         CommitIniFile(staged, path)
     } finally {
         if FileExist(staged)
             try FileDelete(staged)
     }
-    MesoIniWrite(DirectCooldownCheck.Value, ConfigFile, "Rounds", "DirectBypassCooldown")
-    DirectBypassCooldown := DirectCooldownCheck.Value = 1
+    MesoIniWrite(bypass, ConfigFile, "Rounds", "DirectBypassCooldown")
+    DirectBypassCooldown := bypass = 1
 }
 
 AcceptDirectReward(slot, viewer, id) {
@@ -108,7 +126,7 @@ AdvanceDirectRewards(now) {
     global DirectPending, WheelControllerEnabled, Queue, Recorder, Rounds, DirectBypassCooldown, Clock, ChatEnabled
     if !DirectPending.Length || !WheelControllerEnabled || Queue.Paused || Recorder.Phase != "idle"
         return
-    if !DirectRewardReady(Rounds, DirectBypassCooldown, now)
+    if !DirectRewardReady(Rounds, DirectBypassCooldown, now) || !SonionGlitchRoom(1)
         return
     request := DirectPending.RemoveAt(1)
     if request.P.Action = "Chat Control" && !ChatEnabled

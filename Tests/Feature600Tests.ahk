@@ -579,7 +579,7 @@ TestFeature611() {
         IniWrite("Turn M&K Off", ConfigFile, "DirectRedeems", "Slot1")
         Punishments := LoadAndMigratePunishments()
         Check(IniRead(ConfigFile, section, "Name") = "Turn Keyboard Off" && IniRead(ConfigFile, section, "Action") = "Turn Keyboard Off", "Existing M&K punishment is renamed during upgrade")
-        Check(IniRead(ConfigFile, section, "Duration") = "6.25" && IniRead(ConfigFile, section, "Weight") = "3", "Rename preserves punishment settings")
+        Check(Float(IniRead(ConfigFile, section, "Duration")) = 6.25 && Float(IniRead(ConfigFile, section, "Weight")) = 3, "Rename preserves punishment settings")
         Check(IsObject(DirectPunishment(1)) && DirectPunishment(1).Name = "Turn Keyboard Off", "Direct reward slots follow the renamed punishment")
         break
     }

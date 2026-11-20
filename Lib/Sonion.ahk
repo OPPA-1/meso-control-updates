@@ -10,8 +10,9 @@ ScheduleSonion(target, now, stage := 0, transcript := 0) {
         StopSonion()
     }
     preview := IsObject(stage)
+    OpenStreamOutput(false)
     Sonion := {Target: target, Phase: "cue", Next: now + (preview ? 1200 : 10000), Step: 0,
-        Replies: 0, Dim: 0, Panel: 0, Sound: false, RingCheckAt: 0, Flash: 0, Preview: preview, Stage: stage, Transcript: transcript}
+        Replies: 0, Dim: 0, Panel: 0, Phones: [], Scare: 0, Sound: "", RingCheckAt: 0, Flash: 0, Preview: preview, Stage: stage, Transcript: transcript}
 }
 
 StartSonionPreview(owner, now) {
@@ -86,15 +87,20 @@ AdvanceSonion(now) {
             if call.Preview || !InputLockOwners.Count
                 ShowSonionPhone(call, now)
         case "ringing":
-            KeepSonionRinging(call, now)
             ShakeSonionPhone(call, now)
+        case "accepted":
+            call.Scare := StartScareVisual("jeff", call.Target, now)
+            call.Phase := "answered"
+            call.Deadline := call.Scare.End
+            call.Next := now + 16
+            PublishState(true)
         case "answered":
-            if GuiHwndSafe(call.Panel) && now >= call.HideAt
-                CloseSonionWindows(call)
             if now >= call.Deadline
                 StopSonion()
-            else
-                call.Next := now + 60
+            else {
+                DrawScareVisual(call.Scare, now)
+                call.Next := now + 16
+            }
         case "declined":
             StartSonionGlitch(call, now)
         case "glitch":
@@ -142,11 +148,6 @@ AdvanceSonionReply(call, now) {
     }
 }
 
-SonionUiAsset(name) {
-    SplitPath(A_LineFile,, &scriptFolder)
-    return scriptFolder "\..\Ui\" name
-}
-
 SonionBounds(call) {
     WinGetClientPos(&x, &y, &w, &h, "ahk_id " call.Target)
     return {X: x, Y: y, W: w, H: h}
@@ -154,42 +155,82 @@ SonionBounds(call) {
 
 ShowSonionPhone(call, now) {
     b := SonionBounds(call)
-    call.Dim := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000020 -DPIScale", "Meso Visual Effect: Darkness")
-    call.Dim.BackColor := "050208"
-    call.Dim.Show("NA x" b.X " y" b.Y " w" b.W " h" b.H)
-    WinSetTransparent(240, "ahk_id " call.Dim.Hwnd)
-    call.X := b.X + (b.W - 306) // 2
-    call.Y := b.Y + (b.H - 506) // 2
+    if !GuiHwndSafe(call.Dim) {
+        call.Dim := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000020 -DPIScale", "Meso Visual Effect: Darkness")
+        call.Dim.BackColor := "050208"
+        call.Dim.Show("NA x" b.X " y" b.Y " w" b.W " h" b.H)
+        WinSetTransparent(240, "ahk_id " call.Dim.Hwnd)
+    }
+    index := call.Phones.Length + 1
     phone := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000000 -DPIScale", "Sonion")
+    state := {Gui: phone, Sound: "", Index: index}
+    call.Phones.Push(state)
     call.Panel := phone
     phone.BackColor := "AC7ACA"
-    phone.AddText("x5 y4 w296 h498 Background21162E", "")
-    phone.AddText("x12 y12 w282 h482 Background2E1D50", "")
-    phone.AddText("x12 y345 w282 h147 Background37245F", "")
-    phone.AddText("x107 y19 w92 h23 Background100A1C", "")
-    phone.SetFont("s10 Bold cE9D7F8", "Segoe UI")
-    phone.AddText("x32 y26 w63 h20 BackgroundTrans", "9:41")
-    phone.AddText("x218 y26 w56 h20 Right BackgroundTrans", "● ● ●")
-    phone.AddText("x34 y77 w238 h28 Center BackgroundTrans", "INCOMING CALL")
-    phone.AddText("x74 y111 w158 h159 Background8C5CBA", "")
+    phone.AddText("x4 y4 w216 h362 Background21162E", "")
+    phone.AddText("x10 y10 w204 h348 Background2E1D50", "")
+    phone.SetFont("s9 Bold cE9D7F8", "Segoe UI")
+    phone.AddText("x22 y27 w180 h20 Center BackgroundTrans", "INCOMING CALL " index)
     caller := SonionUiAsset("sonion_ring.png")
     if !FileExist(caller)
         caller := SonionUiAsset("sonion_ring_default.png")
-    call.CallerImage := phone.AddPicture("x76 y113 w154 h155", caller)
-    phone.SetFont("s27 Bold cFFFFFF", "Segoe UI")
-    phone.AddText("x26 y279 w254 h51 Center BackgroundTrans", "Sonion")
-    phone.SetFont("s11 Norm cCBB1EC", "Segoe UI")
-    phone.AddText("x29 y335 w248 h29 Center BackgroundTrans", "Ringing…")
-    phone.SetFont("s11 Bold", "Segoe UI")
-    phone.AddButton("x31 y394 w113 h49", "Decline").OnEvent("Click", AnswerSonion.Bind(false))
-    phone.AddButton("x162 y394 w113 h49 Default", "Answer").OnEvent("Click", AnswerSonion.Bind(true))
-    phone.AddText("x108 y475 w90 h4 BackgroundDBC3F5", "")
-    phone.Show("NA x" call.X " y" call.Y " w306 h506")
-    WinSetRegion("0-0 w306 h506 R55-55", "ahk_id " phone.Hwnd)
-    call.PhoneClip := 0
+    call.CallerImage := phone.AddPicture("x55 y69 w114 h113", caller)
+    phone.SetFont("s22 Bold cFFFFFF", "Segoe UI")
+    phone.AddText("x15 y192 w194 h44 Center BackgroundTrans", "Sonion")
+    phone.SetFont("s10 Norm cCBB1EC", "Segoe UI")
+    phone.AddText("x15 y243 w194 h24 Center BackgroundTrans", "Ringing…")
+    phone.SetFont("s10 Bold", "Segoe UI")
+    phone.AddButton("x14 y297 w94 h39", "Decline").OnEvent("Click", AnswerSonion.Bind(false))
+    phone.AddButton("x116 y297 w94 h39", "Answer").OnEvent("Click", AnswerSonion.Bind(true))
+    capacity := SonionPhoneCapacity(b)
+    phone.SetFont("s8 Norm", "Segoe UI")
+    state.Pager := phone.AddButton("x42 y341 w140 h22 Hidden", "Other calls")
+    state.Pager.OnEvent("Click", CycleSonionPhones)
+    call.Page := Floor((index - 1) / capacity)
+    LayoutSonionPhones(call, now)
+    state.Sound := SpecialSound("ringring.mp3", true)
+    if !call.HasOwnProp("PhoneClip")
+        call.PhoneClip := 0
     call.Phase := "ringing"
     call.Next := now
-    PlaySonionSound(call, "ringring.mp3", true)
+}
+
+SonionPhoneCapacity(bounds) {
+    return Max(1, Floor((bounds.W - 20) / 240)) * Max(1, Floor((bounds.H - 20) / 386))
+}
+
+CycleSonionPhones(*) {
+    global Sonion
+    if !IsObject(Sonion) || Sonion.Phase != "ringing"
+        return
+    capacity := SonionPhoneCapacity(SonionBounds(Sonion))
+    pages := Ceil(Sonion.Phones.Length / capacity)
+    Sonion.Page := Mod(Sonion.Page + pages - 1, pages)
+    LayoutSonionPhones(Sonion, NowMs())
+}
+
+LayoutSonionPhones(call, now) {
+    bounds := SonionBounds(call)
+    columns := Max(1, Floor((bounds.W - 20) / 240))
+    capacity := SonionPhoneCapacity(bounds)
+    pages := Ceil(call.Phones.Length / capacity)
+    cursor := Buffer(8, 0)
+    DllCall("user32\GetCursorPos", "Ptr", cursor)
+    mx := NumGet(cursor, 0, "Int"), my := NumGet(cursor, 4, "Int")
+    for p in call.Phones {
+        p.Pager.Visible := pages > 1
+        if Floor((p.Index - 1) / capacity) != call.Page {
+            p.Gui.Hide()
+            continue
+        }
+        slot := Mod(p.Index - 1, capacity)
+        x := bounds.X + 12 + Mod(slot, columns) * 240
+        y := bounds.Y + 12 + Floor(slot / columns) * 386
+        hover := mx >= x - 6 && mx <= x + 230 && my >= y - 6 && my <= y + 376
+        dx := hover ? 0 : Round(5 * Sin(now / 47 + p.Index))
+        dy := hover ? 0 : Round(3 * Sin(now / 29 + p.Index))
+        p.Gui.Show("NA x" x + dx " y" y + dy " w224 h370")
+    }
 }
 
 ShakeSonionPhone(call, now) {
@@ -203,13 +244,7 @@ ShakeSonionPhone(call, now) {
                 call.PhoneClip := clip, call.PhoneScreen := screen
         }
     }
-    cursor := Buffer(8, 0)
-    DllCall("user32\GetCursorPos", "Ptr", cursor)
-    x := NumGet(cursor, 0, "Int"), y := NumGet(cursor, 4, "Int")
-    inside := Abs(x - (call.X + 153)) <= 163 && Abs(y - (call.Y + 253)) <= 271
-    dx := Round((inside ? 2 : 12) * Sin(now / 47))
-    dy := Round((inside ? 1 : 7) * Sin(now / 29))
-    DllCall("user32\SetWindowPos", "Ptr", call.Panel.Hwnd, "Ptr", -1, "Int", call.X + dx, "Int", call.Y + dy, "Int", 0, "Int", 0, "UInt", 0x11)
+    LayoutSonionPhones(call, now)
     call.Next := now + 38
 }
 
@@ -221,31 +256,15 @@ AnswerSonion(answer, *) {
     Critical("On")
     try {
         call := Sonion
-        if !call.Preview && !WinActive("ahk_id " call.Target) {
-            if !WinActive("ahk_id " GuiHwndSafe(call.Panel)) {
-                StopSonion()
-                return
-            }
-            try WinActivate("ahk_id " call.Target)
+        if !answer {
+            ShowSonionPhone(call, NowMs())
+            return
         }
-        StopSonionSound(call)
         CloseSonionWindows(call)
-        now := NowMs()
-        if answer {
-            call.Phase := "answered"
-            call.Next := now
-            call.HideAt := now + 3200
-            call.Deadline := now + 12000
-            if call.Preview
-                call.Transcript.Text := "Answered"
-            ShowSonionScare(call)
-            PlaySonionSound(call, "321.wav")
-        } else {
-            call.Phase := "declined"
-            call.Next := now + 5000
-            if call.Preview
-                call.Transcript.Text := "Declined. Glitch starts in five seconds."
-        }
+        call.Phase := "accepted"
+        call.Next := NowMs() + Random(5000, 20000)
+        if call.Preview
+            call.Transcript.Text := "Answered"
     } catch as err {
         LogEvent("Sonion response: " err.Message)
         StopSonion()
@@ -350,6 +369,12 @@ CompatibleActivePick(candidate, effects) {
 }
 
 CloseSonionWindows(call) {
+    for phone in call.Phones {
+        StopSpecialSound(phone.Sound)
+        if GuiHwndSafe(phone.Gui)
+            try phone.Gui.Destroy()
+    }
+    call.Phones := []
     if call.HasOwnProp("PhoneClip") && IsObject(call.PhoneClip) && WinActive("ahk_id " call.Target) {
         current := Buffer(16, 0)
         if DllCall("user32\GetClipCursor", "Ptr", current, "Int") && SameMouseClip(current, call.PhoneScreen)
@@ -371,6 +396,7 @@ StopSonion() {
     call := Sonion
     Sonion := 0
     StopSonionSound(call)
+    StopScareVisual(call.Scare)
     try RestoreEffectClipboard(call)
     CloseHorrorFlash(call.Flash)
     CloseSonionWindows(call)
@@ -384,65 +410,12 @@ StopSonion() {
         try call.Stage.Destroy()
 }
 
-SonionMediaFile(dir, name) {
-    if name = "ringring.mp3" {
-        custom := SonionUiAsset(name)
-        if FileExist(custom)
-            return custom
-        data := SonionRingtoneData()
-    } else
-        data := name = "321.wav" ? SonionScreamData() : SonionGlitchData()
-    path := dir "\sonion-603-" name
-    size := 0
-    if !DllCall("crypt32\CryptStringToBinaryW", "WStr", data, "UInt", 0, "UInt", 1, "Ptr", 0, "UInt*", &size, "Ptr", 0, "Ptr", 0, "Int")
-        throw Error("Sonion audio size could not be read")
-    bytes := Buffer(size)
-    if !DllCall("crypt32\CryptStringToBinaryW", "WStr", data, "UInt", 0, "UInt", 1, "Ptr", bytes, "UInt*", &size, "Ptr", 0, "Ptr", 0, "Int")
-        throw Error("Sonion audio could not be decoded")
-    audio := FileOpen(path, "w")
-    try audio.RawWrite(bytes, size)
-    finally audio.Close()
-    return path
-}
-
-SonionMci(command, response := 0, chars := 0) {
-    return DllCall("winmm\mciSendStringW", "WStr", command, "Ptr", response, "UInt", chars, "Ptr", 0)
-}
-
-KeepSonionRinging(call, now) {
-    if !call.Sound || now < call.RingCheckAt
-        return
-    call.RingCheckAt := now + 120
-    mode := Buffer(32, 0)
-    if !SonionMci("status mesosonion mode", mode, 16) && StrGet(mode, "UTF-16") = "stopped"
-        SonionMci("play mesosonion from 0")
-}
-
 StopSonionSound(call) {
-    if call.Sound {
-        SonionMci("close mesosonion")
-        call.Sound := false
-    }
+    StopSpecialSound(call.Sound)
+    call.Sound := ""
 }
 
 PlaySonionSound(call, name, repeat := false) {
-    global RuntimeDir
-    try {
-        StopSonionSound(call)
-        path := SonionMediaFile(RuntimeDir, name)
-        device := name = "321.wav" ? "waveaudio" : "mpegvideo"
-        status := SonionMci("open " Chr(34) path Chr(34) " type " device " alias mesosonion")
-        if status
-            throw Error("Windows audio open returned " status)
-        call.Sound := true
-        SonionMci("setaudio mesosonion volume to 1000")
-        status := SonionMci("play mesosonion from 0" (repeat ? " repeat" : ""))
-        if status && repeat
-            status := SonionMci("play mesosonion from 0")
-        if status
-            throw Error("Windows audio playback returned " status)
-    } catch as err {
-        StopSonionSound(call)
-        LogEvent("Sonion audio: " err.Message)
-    }
+    StopSonionSound(call)
+    call.Sound := SpecialSound(name, repeat)
 }

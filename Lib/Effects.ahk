@@ -358,6 +358,13 @@ BeginEffect(now) {
         BlockEffect("Unsupported action: " p.Action, now)
         return
     }
+    if p.Action = "Jumpscare" {
+        QueueRandomScare(ForegroundTarget(), now)
+        Effect.Phase := "running"
+        Effect.Note := "Jumpscare queued"
+        Effect.End := now + 300
+        return
+    }
     if p.Action = "Time Tax" {
         Effect.Phase := "running"
         applied := Clock.Tax(120000, now, p.HasOwnProp("TimerGeneration") ? p.TimerGeneration : Clock.Generation)
@@ -759,6 +766,7 @@ HasEffects(owner := "") {
 CancelEffects(reason := "") {
     global ActiveEffects
     StopSonion()
+    CancelScares()
     for item in ActiveEffects.Clone()
         WithEffect(item, FinishEffect, reason)
 }

@@ -104,6 +104,7 @@ DefaultPunishments() {
         {Name: "Super Burn", Enabled: true, Duration: 3, Weight: 2, Action: "Use Super", Keys: "f", Value: 0},
         {Name: "Bounce House", Enabled: true, Duration: 7, Weight: 5, Action: "Spam Jump", Keys: "Space", Value: 0},
         {Name: "Time Tax -2:00", Enabled: true, Duration: 3, Weight: 5, Action: "Time Tax", Keys: "", Value: 120},
+        {Name: "Jumpscare", Enabled: true, Duration: 1, Weight: 2, Action: "Jumpscare", Keys: "", Value: 0},
         {Name: "Send Chat", Enabled: true, Duration: 3, Weight: 5, Action: "Send Chat", Keys: "Enter", Value: 0},
         {Name: "Return to Orbit", Enabled: true, Duration: 5, Weight: 5, Action: "Return to Orbit", Keys: "Tab;o", Value: 0},
         {Name: "Lights Out", Enabled: true, Duration: 8, Weight: 2, Action: "Lights Out", Keys: "", Value: 210},
@@ -121,7 +122,7 @@ DefaultPunishments() {
 }
 
 ActionNames() {
-    return ["Movement Jam", "Spam Crouch", "Spam Jump", "Exit Desktop", "Random Shoot", "Cycle Keys", "Look Down + Shoot", "Spin 360", "Inventory Spam", "Use Super", "Time Tax", "Send Chat", "Return to Orbit", "Lights Out", "Tunnel Vision", "Screen Shuffle", "Invert Screen", "Drunk Vision", "Random Loadout", "Recorded Sequence", "Custom Sequence", "Spam Key", "Chat Control", "Turn M&K Off", "Alt+Enter", "Wide View", "Change Mouse Sensitivity"]
+    return ["Jumpscare", "Movement Jam", "Spam Crouch", "Spam Jump", "Exit Desktop", "Random Shoot", "Cycle Keys", "Look Down + Shoot", "Spin 360", "Inventory Spam", "Use Super", "Time Tax", "Send Chat", "Return to Orbit", "Lights Out", "Tunnel Vision", "Screen Shuffle", "Invert Screen", "Drunk Vision", "Random Loadout", "Recorded Sequence", "Custom Sequence", "Spam Key", "Chat Control", "Turn M&K Off", "Alt+Enter", "Wide View", "Change Mouse Sensitivity"]
 }
 
 LoadAndMigratePunishments() {
@@ -221,6 +222,17 @@ LoadAndMigratePunishments() {
                 result.Push(p.Clone())
         needsSave := true
     }
+    if IniRead(path, "Meta", "Feature610", "0") != "1" {
+        foundScare := false
+        for p in result
+            if p.Action = "Jumpscare"
+                foundScare := true
+        if !foundScare && result.Length < 200
+            for p in defaults
+                if p.Action = "Jumpscare"
+                    result.Push(p.Clone())
+        needsSave := true
+    }
     if needsSave {
         try SavePunishmentList(result)
         catch as err
@@ -257,6 +269,7 @@ SavePunishmentList(list, profile := "") {
         IniWrite("1", staged, "Meta", "Feature522")
         IniWrite("1", staged, "Meta", "Feature600")
         IniWrite("1", staged, "Meta", "Feature603")
+        IniWrite("1", staged, "Meta", "Feature610")
         CommitIniFile(staged, path)
         return true
     } finally {
@@ -350,7 +363,7 @@ OpenSettings(*) {
     EditorGrid.Choose(1)
     EditorRange := SettingsGui.AddText("x553 y470 w230 h24 Hidden cAA95BF", "")
     RawAccelButton := SettingsGui.AddButton("x322 y461 w216 h30 Hidden", "Link Raw Accel")
-    RawAccelButton.OnEvent("Click", ChooseRawAccel)
+    RawAccelButton.OnEvent("Click", OpenRawAccelSetup)
     EditorChatTest := BuildChatTestPicker(SettingsGui)
     EditorRawKeys := ""
     for spec in [[35, "New", EditorAdd, 75], [118, "Save", EditorSave, 78], [204, "Delete", EditorDelete, 78], [290, "Record inputs", OpenRecorder, 129], [427, "Preview", PreviewSelected, 108], [544, "Live test", LiveTestSelected, 125]] {
@@ -618,7 +631,7 @@ UpdateEditorHint(*) {
     EditorRange.Text := IsObject(limits) ? limits.Label : ""
     RawAccelButton.Visible := action = "Change Mouse Sensitivity"
     if RawAccelButton.Visible
-        RawAccelButton.Text := RawAccelFolder() = "" ? "Link Raw Accel" : "Change Raw Accel folder"
+        RawAccelButton.Text := "Raw Accel setup"
 }
 
 EditorAdd(*) {

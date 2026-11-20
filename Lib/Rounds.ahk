@@ -125,6 +125,10 @@ LandSpin(job, now) {
             job.BonusStart := now
         }
     }
+    if job.HasOwnProp("Bonus") {
+        job.P.BonusPair := true
+        job.Bonus.BonusPair := true
+    }
     StartEffect(job.P, job.Preview, now, job.Id)
     if job.HasOwnProp("Bonus")
         StartEffect(job.Bonus, job.Preview, now, job.Id)

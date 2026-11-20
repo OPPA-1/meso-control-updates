@@ -1,5 +1,5 @@
 ﻿EmptyState() {
-    return {Pid: 0, Revision: 0, PublishedAt: 0, Wheel: ["wheel", "idle", "", "0", "0", "", "0", "0", "", "1", "wheel", "0"], DisplayMode: "wheel", Items: [], Slots: ["slots", "idle", "", "0", "0", "0", "0", "0", "", "", "", ""], Pools: Map(), Timer: ["timer", "idle", "0", "0", "0"], Active: ["active", "", "0", "", "0"], ActiveItems: [], FirstResult: "", Bonus: "", BonusStart: 0, GlitchStart: 0, GlitchEnd: 0, Queue: 0, Paused: false, Guides: false, Score: ["score", "0", "0", "0"], HorrorEvents: []}
+    return {Pid: 0, Revision: 0, PublishedAt: 0, Wheel: ["wheel", "idle", "", "0", "0", "", "0", "0", "", "1", "wheel", "0"], DisplayMode: "wheel", Items: [], Slots: ["slots", "idle", "", "0", "0", "0", "0", "0", "", "", "", ""], Pools: Map(), Timer: ["timer", "idle", "0", "0", "0"], Active: ["active", "", "0", "", "0"], ActiveItems: [], FirstResult: "", Bonus: "", BonusStart: 0, GlitchStart: 0, GlitchEnd: 0, Queue: 0, Paused: false, Guides: false, Score: ["score", "0", "0", "0"], HorrorEvents: [], Sounds: [], Scare: []}
 }
 
 RequireOutputFields(fields, count, tag) {
@@ -113,6 +113,18 @@ ParseOutputState(data) {
                 RequireOutputFields(f, 3, tag)
                 next.GlitchStart := RequireOutputNumber(f[2], tag)
                 next.GlitchEnd := RequireOutputNumber(f[3], tag)
+            case "sound":
+                RequireOutputFields(f, 5, tag)
+                if !InStr("|321.wav|glitch.mp3|ringring.mp3|scare1|scare2|", "|" f[3] "|")
+                    throw Error("Unknown special audio")
+                next.Sounds.Push({Id: f[2], Name: f[3], Repeat: f[4] = "1", Until: RequireOutputNumber(f[5], tag)})
+            case "scare":
+                RequireOutputFields(f, 4, tag)
+                if !InStr("|scare1|scare2|jeff|", "|" f[2] "|")
+                    throw Error("Unknown jumpscare image")
+                RequireOutputNumber(f[3], tag)
+                RequireOutputNumber(f[4], tag)
+                next.Scare := f
             case "horror":
                 RequireOutputFields(f, 3, tag)
                 if f[2] = ""
@@ -164,6 +176,14 @@ OutputPanelKeys(state, now) {
     if timer[2] = "prep" || timer[2] = "activity" {
         remaining := Max(0, timer[3] + 0 - now)
         timerKey .= "|" TimeText(remaining) "|" Floor(now / 100)
+    }
+    if state.Scare.Length {
+        stamp := "|scare:" Line(state.Scare*) "|frame:" now
+        wheelKey .= stamp
+        slotKey .= stamp
+        activeKey .= stamp
+        timerKey .= stamp
+        guide .= stamp
     }
     return Map(1, wheelKey guide, 2, slotKey guide, 3, activeKey guide, 4, timerKey guide, 5, Line(state.Score*) guide)
 }

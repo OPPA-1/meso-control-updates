@@ -96,3 +96,62 @@ StopSensitivityWorker(item) {
         return
     try WriteAtomic(item.SensitivityFile ".cancel", "cancel")
 }
+
+OpenRawAccelSetup(*) {
+    global ConfigFile, RuntimeDir
+    dialog := Gui("-MaximizeBox -MinimizeBox", "Raw Accel setup")
+    dialog.BackColor := "160F20"
+    dialog.SetFont("s10 cF5E9FF", "Segoe UI")
+    status := dialog.AddText("x24 y25 w405 h62", "Install Raw Accel, then restart Windows. Meso Control applies and restores the sensitivity during each punishment.")
+    install := dialog.AddButton("x24 y112 w192 h36", "Download and install")
+    existing := dialog.AddButton("x232 y112 w192 h36", "Link existing folder")
+    existing.OnEvent("Click", (*) => (ChooseRawAccel(), dialog.Destroy()))
+    install.OnEvent("Click", DownloadRawAccel.Bind(dialog, status, install))
+    dialog.Show("w448 h174")
+}
+
+DownloadRawAccel(dialog, status, button, *) {
+    global RuntimeDir
+    button.Enabled := false
+    path := RuntimeDir "\rawaccel-setup-" NewId() ".state"
+    destination := RuntimeDir "\RawAccel"
+    cmd := UpdateQuote(A_WinDir "\System32\WindowsPowerShell\v1.0\powershell.exe")
+        . " -NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "
+        . UpdateQuote(A_ScriptDir "\Lib\RawAccelSetup.ps1") " -Folder " UpdateQuote(destination) " -StatusPath " UpdateQuote(path)
+    try {
+        pid := 0
+        Run(cmd, A_ScriptDir, "Hide", &pid)
+        status.Text := "Downloading Raw Accel…"
+        callback := () => (CheckRawAccelSetup(dialog, status, button, path, pid) ? SetTimer(callback, 0) : 0)
+        SetTimer(callback, 500)
+        dialog.OnEvent("Close", (*) => SetTimer(callback, 0))
+    } catch as err {
+        status.Text := err.Message
+        button.Enabled := true
+    }
+}
+
+CheckRawAccelSetup(dialog, status, button, path, pid) {
+    global ConfigFile
+    if !GuiHwndSafe(dialog)
+        return true
+    result := ""
+    try result := FileRead(path, "UTF-8")
+    if result = "" {
+        if !ProcessExist(pid) {
+            status.Text := "Setup stopped. Try again to install Raw Accel."
+            button.Enabled := true
+            return true
+        }
+        return false
+    }
+    if SubStr(result, 1, 8) = "restart|" {
+        folder := SubStr(result, 9)
+        MesoIniWrite(folder, ConfigFile, "Input", "RawAccelFolder")
+        status.Text := "Raw Accel is linked. Restart Windows to enable the driver."
+    } else
+        status.Text := SubStr(result, 7)
+    try FileDelete(path)
+    button.Enabled := true
+    return true
+}

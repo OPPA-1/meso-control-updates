@@ -63,7 +63,6 @@ AudioReady := Map()
 LastSoundSync := 0
 HorrorSoundPath := A_ScriptDir "\1.wav"
 FigureSoundPath := A_ScriptDir "\2.wav"
-OutputScareFrame := ""
 FigureState := "idle"
 FigureGui := 0
 FigurePicture := 0
@@ -187,7 +186,7 @@ PublishOutputHealth() {
 }
 
 Render() {
-    global DrawBusy, Back, Front, State, LastWheelId, Disk, TickIndex, LastTickSound, LandPlayed, OutputGui, OutputClosing, OutputStopRequested, OutputRenderError, PanelKeys, GuideRects, OutputScareFrame
+    global DrawBusy, Back, Front, State, LastWheelId, Disk, TickIndex, LastTickSound, LandPlayed, OutputGui, OutputClosing, OutputStopRequested, OutputRenderError, PanelKeys, GuideRects
     if DrawBusy || OutputClosing || OutputStopRequested
         return
     DrawBusy := true
@@ -251,7 +250,6 @@ Render() {
                     DrawGuides(Back, index)
             } finally Back.Pop(saved)
         }
-        DrawOutputScare(Back, now)
         Back.Flush()
         Critical(20)
         tmp := Front
@@ -261,7 +259,6 @@ Render() {
         Critical("Off")
         DllCall("user32\InvalidateRect", "Ptr", OutputGui.Hwnd, "Ptr", 0, "Int", 0)
         DllCall("user32\UpdateWindow", "Ptr", OutputGui.Hwnd)
-        OutputScareFrame := State.Scare.Length && now < State.Scare[4] + 0 ? State.Scare[2] "|" State.Scare[3] : ""
         UpdateRenderStats(now, PerfNowMs() - started, w[2] = "spin" || s[2] = "spin")
         OutputRenderError := ""
     } catch as err {
@@ -980,7 +977,7 @@ RunRenderLoop() {
         now := PerfNowMs()
         if now >= nextFrame {
             Render()
-            moving := State.Wheel[2] = "spin" || State.Slots[2] = "spin" || State.Scare.Length
+            moving := State.Wheel[2] = "spin" || State.Slots[2] = "spin"
             period := moving ? 1000.0 / 60.0 : 50.0
             nextFrame += period
             if nextFrame < PerfNowMs() - period

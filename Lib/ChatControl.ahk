@@ -658,13 +658,13 @@ SaveChatSettings(*) {
 }
 
 BuiltInRewardChatKeys() {
-    return Map("class", "v", "airmove", "x", "emote1", "Up", "emote2", "Left", "emote3", "Down", "emote4", "Right")
+    return Map("class", "v", "airmove", "x", "prismatic", "b", "emote1", "Up", "emote2", "Left", "emote3", "Down", "emote4", "Right")
 }
 
 ApplySharedChatKeys() {
     global Chat, SharedKeys
     for name, key in SharedKeys.Keys {
-        if Chat.Bindings.Has(name) && (SharedKeys.Edited.Has(name) || !Chat.Bindings[name] || Chat.Bindings[name] = SharedKeys.Defaults[name])
+        if Chat.Bindings.Has(name) && (name = "prismatic" || SharedKeys.Edited.Has(name) || !Chat.Bindings[name] || Chat.Bindings[name] = SharedKeys.Defaults[name])
             Chat.Bindings[name] := ChatKeyToken(key)
     }
 }

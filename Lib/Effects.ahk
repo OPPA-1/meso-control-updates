@@ -39,6 +39,10 @@ ChooseChatPhrase() {
     return selected
 }
 
+SendChatTabDelay(remaining) {
+    return remaining ? 90 : 190
+}
+
 SendChatMessage(p) {
     return p.HasOwnProp("ChatTestMessage") ? p.ChatTestMessage : ChooseChatPhrase()
 }
@@ -322,7 +326,7 @@ StartEffect(p, preview, now, owner := "") {
     }
     owned := Map()
     owned.CaseSense := "Off"
-    duration := p.Action = "Random Loadout" ? Max(7000, Round(p.Duration * 1000)) : Max(100, Round(p.Duration * 1000))
+    duration := p.Action = "Random Loadout" ? Max(4000, Round(p.Duration * 1000)) : Max(100, Round(p.Duration * 1000))
     item := {P: p, Preview: preview, Owner: owner, Phase: preview ? "preview" : "waiting", Start: now, End: now + duration, Duration: duration, WaitUntil: now + 15000, Target: 0, Next: now, Step: 0, Note: preview ? "Preview - no game input" : "Waiting for game focus", Keys: keys, Sequence: [], Index: 1, LastMove: now, SentDown: 0, SentUp: 0, LastKey: "", LastWaitLog: 0, OwnedKeys: owned, InputLock: false, VisualPid: 0, VisualFile: "", VisualReady: false, VisualCheck: 0, VisualLaunch: 0, Sensitivity: 0}
     ActiveEffects.Push(item)
     WithEffect(item, BeginEffect, now)
@@ -458,10 +462,10 @@ TryActivateEffect(now) {
             BlockEffect("Visual effect could not launch: " err.Message, now)
             return false
         }
-    } else if p.Action = "Turn M&K Off" || p.Action = "Random Loadout" {
+    } else if p.Action = "Turn Keyboard Off" || p.Action = "Random Loadout" {
         if BeginGameplayInputLock(Effect) {
             Effect.Note := "Input blocked"
-        } else if p.Action = "Turn M&K Off" {
+        } else if p.Action = "Turn Keyboard Off" {
             BlockEffect("Input block unavailable. Restart Meso Control as administrator.", now)
             return false
         } else {
@@ -469,6 +473,11 @@ TryActivateEffect(now) {
             Effect.Note := "Loadout Roulette | Input block unavailable"
             LogEvent("Loadout Roulette will run without input blocking")
         }
+    } else if p.Action = "Alt+Enter" {
+        plan := AltEnterPlan(Effect.Duration, Round(FixedPunishmentValue(p) * 1000))
+        Effect.AltEnterCount := 0
+        Effect.AltEnterLimit := plan.Count
+        Effect.End := now + plan.Duration
     } else if p.Action = "Change Mouse Sensitivity" {
         try StartSensitivityWorker(Effect, now)
         catch as err {
@@ -602,14 +611,14 @@ AdvanceOneEffect(now) {
                 if Pulse(Effect.InventoryKey, now, 110) {
                     Effect.Note := Effect.HasOwnProp("InputLockUnavailable") ? "Opening inventory | input lock unavailable" : "Opening inventory"
                     Effect.Step := 1
-                    Effect.Next := now + 1150
+                    Effect.Next := now + 750
                 } else
                     Effect.Next := now + 100
             } else if Effect.Step = 1 {
                 if Pulse("Left", now, 110) {
                     Effect.Note := "Opening loadouts"
                     Effect.Step := 2
-                    Effect.Next := now + 1050
+                    Effect.Next := now + 650
                 } else
                     Effect.Next := now + 100
             } else if Effect.Step = 2 {
@@ -622,7 +631,7 @@ AdvanceOneEffect(now) {
                     Effect.Note := "Selecting loadout " Effect.LoadoutSlot
                     LogEvent("Loadout slot " Effect.LoadoutSlot " hovered at " pos.X "," pos.Y)
                     Effect.Step := 3
-                    Effect.Next := now + 300
+                    Effect.Next := now + 140
                 } catch as err {
                     FinishEffect("Loadout target unavailable: " err.Message)
                     return
@@ -637,19 +646,19 @@ AdvanceOneEffect(now) {
                 Effect.LastKey := "LButton"
                 Effect.SentDown += 1
                 Effect.Step := 4
-                Effect.Next := now + 115
+                Effect.Next := now + 75
             } else if Effect.Step = 4 {
                 D2LoadoutMouse(false)
                 Effect.LoadoutMouseDown := false
                 Effect.SentUp += 1
                 Effect.Note := "Waiting for loadout " Effect.LoadoutSlot
                 Effect.Step := 5
-                Effect.Next := now + 1850
+                Effect.Next := now + 1000
             } else if Effect.Step = 5 {
                 if Pulse(Effect.InventoryKey, now, 110) {
                     Effect.Note := "Returning to game"
                     Effect.Step := 6
-                    Effect.Next := now + 450
+                    Effect.Next := now + 220
                 } else
                     Effect.Next := now + 100
             } else if Effect.Step = 6 {
@@ -663,9 +672,12 @@ AdvanceOneEffect(now) {
                 }
                 Effect.Step := 1
             }
-            if Pulse("Enter", now, 35)
-                Effect.Next := now + Round(FixedPunishmentValue(p) * 1000)
-            else
+            if Effect.AltEnterCount >= Effect.AltEnterLimit
+                return
+            if Pulse("Enter", now, 35) {
+                Effect.AltEnterCount += 1
+                Effect.Next := Effect.AltEnterCount >= Effect.AltEnterLimit ? Effect.End : now + Round(FixedPunishmentValue(p) * 1000)
+            } else
                 Effect.Next := now + 50
         case "Send Chat":
             if Effect.Step = 0 {
@@ -675,9 +687,11 @@ AdvanceOneEffect(now) {
                 Effect.Step := 1
                 Effect.Next := now + 180
             } else if Effect.Step = 1 && Effect.Tabs {
-                if Pulse("Tab", now, 35)
+                if Pulse("Tab", now, 35) {
                     Effect.Tabs -= 1
-                Effect.Next := now + 90
+                    Effect.Next := now + SendChatTabDelay(Effect.Tabs)
+                } else
+                    Effect.Next := now + 50
             } else if Effect.Step = 1 {
                 message := SendChatMessage(p)
                 savedClipboard := ClipboardAll()
@@ -745,7 +759,7 @@ AdvanceOneEffect(now) {
                 Pulse(drift, now, 160)
             }
             Effect.Next := now + Random(190, 390)
-        case "Turn M&K Off":
+        case "Turn Keyboard Off":
             RefreshGameplayMouseLock()
             Effect.Next := now + 15
         case "Lights Out", "Tunnel Vision", "Wide View", "Screen Shuffle", "Invert Screen", "Change Mouse Sensitivity":
@@ -775,6 +789,7 @@ FinishEffect(reason := "") {
     global Effect, EffectOwnedKeys, GameKeyOwners, ActiveEffects, LastEffectMessage, ChatEffect, Chat, ChatMouseActions, ChatRepeatJobs
     if !IsObject(Effect)
         return
+    RestoreAltEnter(Effect)
     if Effect.HasOwnProp("LoadoutMouseDown") && Effect.LoadoutMouseDown {
         try D2LoadoutMouse(false)
         Effect.LoadoutMouseDown := false

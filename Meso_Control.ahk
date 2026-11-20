@@ -6,6 +6,7 @@
 #Include Lib\ActivityOptions.ahk
 #Include Lib\AltTab.ahk
 #Include Lib\Effects.ahk
+#Include Lib\AltEnter.ahk
 #Include Lib\Sonion.ahk
 #Include Lib\SonionScream.ahk
 #Include Lib\SonionGlitch.ahk
@@ -706,6 +707,7 @@ EngineTick() {
             if elapsed >= 8000 && job.Phase = "hold" && SonionGlitchRoom(SpinEffectCount(job))
                 LandSpin(job, now)
         }
+        AdvanceAltEnterRestores()
         AdvanceEffect(now)
         AdvanceScares(now)
         try AdvanceSonion(now)
@@ -1128,15 +1130,11 @@ ExistingStreamOutputPid() {
 }
 
 PublishState(force := false) {
-    global ActiveScare
     EnsureScareState()
     global Queue, Clock, Slots, ActiveEffects, Guides, LastPublished, LastPublishTick, PublisherRevision, RuntimeDir, ScoreVisible, MesoScore, ChatScore, HorrorEvents, ViewerVisible, WheelDisplayMode, TtsEnabled, Sonion
     now := NowMs()
     body := Line("status", Queue.Count(), Queue.Paused, Guides)
     body .= SpecialAudioState(now)
-    visibleScare := IsObject(ActiveScare) ? ActiveScare : IsObject(Sonion) && IsObject(Sonion.Scare) ? Sonion.Scare : 0
-    if IsObject(visibleScare)
-        body .= Line("scare", visibleScare.Name, visibleScare.Start, visibleScare.End)
     body .= Line("score", ScoreVisible ? 1 : 0, MesoScore, ChatScore)
     glitch := IsObject(Sonion) && !Sonion.Preview && Sonion.Phase = "glitch"
     if IsObject(Queue.Active) && Queue.Active.HasOwnProp("Pool") {

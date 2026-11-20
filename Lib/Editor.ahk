@@ -112,8 +112,8 @@ DefaultPunishments() {
         {Name: "Screen Shuffle", Enabled: true, Duration: 8, Weight: 2, Action: "Screen Shuffle", Keys: "", Value: 0},
         {Name: "Invert Screen", Enabled: true, Duration: 8, Weight: 2, Action: "Invert Screen", Keys: "", Value: 0},
         {Name: "Drunk Vision", Enabled: true, Duration: 8, Weight: 2, Action: "Drunk Vision", Keys: "", Value: 3},
-        {Name: "Loadout Roulette", Enabled: true, Duration: 7, Weight: 4, Action: "Random Loadout", Keys: "", Value: 12},
-        {Name: "Turn M&K Off", Enabled: true, Duration: 5, Weight: 4, Action: "Turn M&K Off", Keys: "", Value: 0},
+        {Name: "Loadout Roulette", Enabled: true, Duration: 4, Weight: 4, Action: "Random Loadout", Keys: "", Value: 12},
+        {Name: "Turn Keyboard Off", Enabled: true, Duration: 5, Weight: 4, Action: "Turn Keyboard Off", Keys: "", Value: 0},
         {Name: "Alt+Enter", Enabled: true, Duration: 5, Weight: 3, Action: "Alt+Enter", Keys: "", Value: 1},
         {Name: "Wide View", Enabled: true, Duration: 8, Weight: 2, Action: "Wide View", Keys: "", Value: 0.25},
         {Name: "Change Mouse Sensitivity", Enabled: true, Duration: 8, Weight: 3, Action: "Change Mouse Sensitivity", Keys: "", Value: 0.5, Vary: true},
@@ -122,7 +122,7 @@ DefaultPunishments() {
 }
 
 ActionNames() {
-    return ["Jumpscare", "Movement Jam", "Spam Crouch", "Spam Jump", "Exit Desktop", "Random Shoot", "Cycle Keys", "Look Down + Shoot", "Spin 360", "Inventory Spam", "Use Super", "Time Tax", "Send Chat", "Return to Orbit", "Lights Out", "Tunnel Vision", "Screen Shuffle", "Invert Screen", "Drunk Vision", "Random Loadout", "Recorded Sequence", "Custom Sequence", "Spam Key", "Chat Control", "Turn M&K Off", "Alt+Enter", "Wide View", "Change Mouse Sensitivity"]
+    return ["Jumpscare", "Movement Jam", "Spam Crouch", "Spam Jump", "Exit Desktop", "Random Shoot", "Cycle Keys", "Look Down + Shoot", "Spin 360", "Inventory Spam", "Use Super", "Time Tax", "Send Chat", "Return to Orbit", "Lights Out", "Tunnel Vision", "Screen Shuffle", "Invert Screen", "Drunk Vision", "Random Loadout", "Recorded Sequence", "Custom Sequence", "Spam Key", "Chat Control", "Turn Keyboard Off", "Alt+Enter", "Wide View", "Change Mouse Sensitivity"]
 }
 
 LoadAndMigratePunishments() {
@@ -142,6 +142,12 @@ LoadAndMigratePunishments() {
         action := IniRead(path, section, "Action", "Custom Sequence")
         name := IniRead(path, section, "Name", "Custom " A_Index)
         keys := IniRead(path, section, "Keys", "")
+        if action = "Turn M&K Off" {
+            action := "Turn Keyboard Off"
+            if name = "Turn M&K Off"
+                name := "Turn Keyboard Off"
+            needsSave := true
+        }
         if action = "Chat Confession"
             action := "Send Chat"
         if name = "Chat Confession"
@@ -161,8 +167,8 @@ LoadAndMigratePunishments() {
             duration := "5"
             needsSave := true
         }
-        if action = "Random Loadout" && (!IsNumber(duration) || Float(duration) < 7) {
-            duration := "7"
+        if action = "Random Loadout" && (!IsNumber(duration) || Float(duration) < 4) {
+            duration := "4"
             needsSave := true
         }
         weight := IniRead(path, section, "Weight", "5")
@@ -262,6 +268,14 @@ SavePunishmentList(list, profile := "") {
             IniWrite(p.Value, staged, sec, "Value")
             IniWrite(PunishmentVaries(p) ? 1 : 0, staged, sec, "Vary")
             IniWrite(p.HasOwnProp("Grid") ? p.Grid : "2x3", staged, sec, "Grid")
+        }
+        for p in list {
+            if p.Action = "Turn Keyboard Off" && p.Name = "Turn Keyboard Off" {
+                loop 5
+                    if IniRead(staged, "DirectRedeems", "Slot" A_Index, "") = "Turn M&K Off"
+                        IniWrite(p.Name, staged, "DirectRedeems", "Slot" A_Index)
+                break
+            }
         }
         IniWrite("3", staged, "Meta", "Schema")
         IniWrite("1", staged, "Meta", "ChatControlAdded")
@@ -676,8 +690,8 @@ EditorSave(*) {
             break
         }
     }
-    if action = "Random Loadout" && d < 7 {
-        d := 7
+    if action = "Random Loadout" && d < 4 {
+        d := 4
         EditorDuration.Value := d
     }
     if action = "Return to Orbit" {

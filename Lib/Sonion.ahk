@@ -162,31 +162,37 @@ ShowSonionPhone(call, now) {
         WinSetTransparent(240, "ahk_id " call.Dim.Hwnd)
     }
     index := call.Phones.Length + 1
+    position := SonionPhonePlacement(b, call.Phones)
     phone := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000000 -DPIScale", "Sonion")
-    state := {Gui: phone, Sound: "", Index: index}
+    state := {Gui: phone, Sound: "", Index: index, X: position.X, Y: position.Y, Page: position.Page, RegionApplied: false}
     call.Phones.Push(state)
     call.Panel := phone
     phone.BackColor := "AC7ACA"
-    phone.AddText("x4 y4 w216 h362 Background21162E", "")
-    phone.AddText("x10 y10 w204 h348 Background2E1D50", "")
-    phone.SetFont("s9 Bold cE9D7F8", "Segoe UI")
-    phone.AddText("x22 y27 w180 h20 Center BackgroundTrans", "INCOMING CALL " index)
+    phone.AddText("x5 y4 w296 h498 Background21162E", "")
+    phone.AddText("x12 y12 w282 h482 Background2E1D50", "")
+    phone.AddText("x12 y345 w282 h147 Background37245F", "")
+    phone.AddText("x107 y19 w92 h23 Background100A1C", "")
+    phone.SetFont("s10 Bold cE9D7F8", "Segoe UI")
+    phone.AddText("x32 y26 w63 h20 BackgroundTrans", "9:41")
+    phone.AddText("x218 y26 w56 h20 Right BackgroundTrans", "● ● ●")
+    phone.AddText("x34 y77 w238 h28 Center BackgroundTrans", "INCOMING CALL " index)
+    phone.AddText("x74 y111 w158 h159 Background8C5CBA", "")
     caller := SonionUiAsset("sonion_ring.png")
     if !FileExist(caller)
         caller := SonionUiAsset("sonion_ring_default.png")
-    call.CallerImage := phone.AddPicture("x55 y69 w114 h113", caller)
-    phone.SetFont("s22 Bold cFFFFFF", "Segoe UI")
-    phone.AddText("x15 y192 w194 h44 Center BackgroundTrans", "Sonion")
-    phone.SetFont("s10 Norm cCBB1EC", "Segoe UI")
-    phone.AddText("x15 y243 w194 h24 Center BackgroundTrans", "Ringing…")
-    phone.SetFont("s10 Bold", "Segoe UI")
-    phone.AddButton("x14 y297 w94 h39", "Decline").OnEvent("Click", AnswerSonion.Bind(false))
-    phone.AddButton("x116 y297 w94 h39", "Answer").OnEvent("Click", AnswerSonion.Bind(true))
-    capacity := SonionPhoneCapacity(b)
+    call.CallerImage := phone.AddPicture("x76 y113 w154 h155", caller)
+    phone.SetFont("s27 Bold cFFFFFF", "Segoe UI")
+    phone.AddText("x26 y279 w254 h51 Center BackgroundTrans", "Sonion")
+    phone.SetFont("s11 Norm cCBB1EC", "Segoe UI")
+    phone.AddText("x29 y335 w248 h29 Center BackgroundTrans", "Ringing…")
+    phone.SetFont("s11 Bold", "Segoe UI")
+    phone.AddButton("x31 y394 w113 h49", "Decline").OnEvent("Click", AnswerSonion.Bind(false))
+    phone.AddButton("x162 y394 w113 h49 Default", "Answer").OnEvent("Click", AnswerSonion.Bind(true))
+    phone.AddText("x108 y475 w90 h4 BackgroundDBC3F5", "")
     phone.SetFont("s8 Norm", "Segoe UI")
-    state.Pager := phone.AddButton("x42 y341 w140 h22 Hidden", "Other calls")
+    state.Pager := phone.AddButton("x83 y446 w140 h22 Hidden", "Other calls")
     state.Pager.OnEvent("Click", CycleSonionPhones)
-    call.Page := Floor((index - 1) / capacity)
+    call.Page := state.Page
     LayoutSonionPhones(call, now)
     state.Sound := SpecialSound("ringring.mp3", true)
     if !call.HasOwnProp("PhoneClip")
@@ -196,40 +202,81 @@ ShowSonionPhone(call, now) {
 }
 
 SonionPhoneCapacity(bounds) {
-    return Max(1, Floor((bounds.W - 20) / 240)) * Max(1, Floor((bounds.H - 20) / 386))
+    return Max(1, Floor(bounds.W / 306)) * Max(1, Floor(bounds.H / 506))
+}
+
+SonionPhonePages(phones) {
+    pages := 1
+    for phone in phones
+        pages := Max(pages, phone.Page + 1)
+    return pages
+}
+
+SonionRectsOverlap(ax, ay, aw, ah, bx, by, bw, bh) {
+    return ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah
+}
+
+SonionPhoneFits(x, y, other) {
+    ; A phone may overlap another bezel, but both answer/decline rows stay clear, even while shaking.
+    return !SonionRectsOverlap(x - 5, y - 3, 316, 512, other.X + 23, other.Y + 386, 260, 65)
+        && !SonionRectsOverlap(x + 23, y + 386, 260, 65, other.X - 5, other.Y - 3, 316, 512)
+}
+
+SonionPhonePlacement(bounds, phones) {
+    maxX := Max(0, bounds.W - 306), maxY := Max(0, bounds.H - 506)
+    if !phones.Length
+        return {X: maxX // 2, Y: maxY // 2, Page: 0}
+    page := phones[phones.Length].Page
+    marginX := Min(8, maxX // 2), marginY := Min(8, maxY // 2)
+    loop 600 {
+        x := Random(marginX, maxX - marginX), y := Random(marginY, maxY - marginY)
+        fits := true
+        for other in phones {
+            if other.Page = page && !SonionPhoneFits(x, y, other) {
+                fits := false
+                break
+            }
+        }
+        if fits
+            return {X: x, Y: y, Page: page}
+    }
+    ; Keep every call and ringtone; use another page only when no unobstructed button row fits.
+    return {X: Random(0, maxX), Y: Random(0, maxY), Page: page + 1}
 }
 
 CycleSonionPhones(*) {
     global Sonion
     if !IsObject(Sonion) || Sonion.Phase != "ringing"
         return
-    capacity := SonionPhoneCapacity(SonionBounds(Sonion))
-    pages := Ceil(Sonion.Phones.Length / capacity)
+    pages := SonionPhonePages(Sonion.Phones)
     Sonion.Page := Mod(Sonion.Page + pages - 1, pages)
     LayoutSonionPhones(Sonion, NowMs())
 }
 
 LayoutSonionPhones(call, now) {
     bounds := SonionBounds(call)
-    columns := Max(1, Floor((bounds.W - 20) / 240))
-    capacity := SonionPhoneCapacity(bounds)
-    pages := Ceil(call.Phones.Length / capacity)
+    pages := SonionPhonePages(call.Phones)
     cursor := Buffer(8, 0)
     DllCall("user32\GetCursorPos", "Ptr", cursor)
     mx := NumGet(cursor, 0, "Int"), my := NumGet(cursor, 4, "Int")
     for p in call.Phones {
         p.Pager.Visible := pages > 1
-        if Floor((p.Index - 1) / capacity) != call.Page {
+        if p.Page != call.Page {
             p.Gui.Hide()
             continue
         }
-        slot := Mod(p.Index - 1, capacity)
-        x := bounds.X + 12 + Mod(slot, columns) * 240
-        y := bounds.Y + 12 + Floor(slot / columns) * 386
-        hover := mx >= x - 6 && mx <= x + 230 && my >= y - 6 && my <= y + 376
+        x := bounds.X + Min(p.X, Max(0, bounds.W - 306))
+        y := bounds.Y + Min(p.Y, Max(0, bounds.H - 506))
+        hover := mx >= x - 6 && mx <= x + 312 && my >= y - 6 && my <= y + 512
         dx := hover ? 0 : Round(5 * Sin(now / 47 + p.Index))
         dy := hover ? 0 : Round(3 * Sin(now / 29 + p.Index))
-        p.Gui.Show("NA x" x + dx " y" y + dy " w224 h370")
+        x := Max(bounds.X, Min(x + dx, bounds.X + Max(0, bounds.W - 306)))
+        y := Max(bounds.Y, Min(y + dy, bounds.Y + Max(0, bounds.H - 506)))
+        p.Gui.Show("NA x" x " y" y " w306 h506")
+        if !p.RegionApplied {
+            WinSetRegion("0-0 w306 h506 R55-55", "ahk_id " p.Gui.Hwnd)
+            p.RegionApplied := true
+        }
     }
 }
 

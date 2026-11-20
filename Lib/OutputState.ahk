@@ -177,13 +177,5 @@ OutputPanelKeys(state, now) {
         remaining := Max(0, timer[3] + 0 - now)
         timerKey .= "|" TimeText(remaining) "|" Floor(now / 100)
     }
-    if state.Scare.Length {
-        stamp := "|scare:" Line(state.Scare*) "|frame:" now
-        wheelKey .= stamp
-        slotKey .= stamp
-        activeKey .= stamp
-        timerKey .= stamp
-        guide .= stamp
-    }
     return Map(1, wheelKey guide, 2, slotKey guide, 3, activeKey guide, 4, timerKey guide, 5, Line(state.Score*) guide)
 }

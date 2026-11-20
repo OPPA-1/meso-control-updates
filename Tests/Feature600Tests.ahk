@@ -5,6 +5,8 @@
 #Include ..\Lib\ActivityOptions.ahk
 #Include ..\Lib\AltTab.ahk
 #Include ..\Lib\Effects.ahk
+#Include ..\Lib\AltEnter.ahk
+#Include ..\Lib\StreamScares.ahk
 #Include ..\Lib\Sonion.ahk
 #Include ..\Lib\SonionScream.ahk
 #Include ..\Lib\SonionGlitch.ahk
@@ -60,7 +62,7 @@ try {
     Punishments := LoadAndMigratePunishments()
     count := punishments.Length
     Check(LoadAndMigratePunishments().Length = count, "Migration adds the new punishments once")
-    for name in ["Turn M&K Off", "Alt+Enter", "Wide View", "Change Mouse Sensitivity", "Jumpscare"] {
+    for name in ["Turn Keyboard Off", "Alt+Enter", "Wide View", "Change Mouse Sensitivity", "Jumpscare"] {
         matches := 0
         for p in punishments
             if p.Action = name
@@ -115,6 +117,7 @@ try {
     TestSequencePicker()
     TestSendChatPicker()
     TestScareQueue610()
+    TestFeature611()
     Check(DirectArguments(5, 'C:\Meso Control\Meso_Wheel_Trigger.vbs') = '//B //NoLogo "C:\Meso Control\Meso_Wheel_Trigger.vbs" --direct 5 %userName%', "Copied Streamer.bot arguments preserve the quoted path")
     state := Line("meta", 1, 1, 2000) Line("status", 0, 0, 0) Line("wheel", "idle", "", 0, 0, "", 0, 0)
     state .= Line("slots", "idle", "", 0, 0, 0, 0, 0, "", "", "", "") Line("timer", "idle", 0, 0, 0)
@@ -125,7 +128,7 @@ try {
     Check(parsed.Bonus = "Tunnel Vision" && parsed.GlitchEnd = 9500, "OBS receives the bonus and glitch animation")
     Check(OutputPanelKeys(parsed, 2600)[1] != OutputPanelKeys(parsed, 2650)[1], "Glitch animation refreshes the wheel panel")
     Check(parsed.ActiveItems.Length = 2 && parsed.ActiveItems[1][6] = "1", "Both effects and the bonus badge reach the OBS state")
-    Check(parsed.Sounds.Length = 1 && parsed.Sounds[1].Repeat && parsed.Scare[2] = "scare1", "Scare video and individual looping calls reach the output process")
+    Check(parsed.Sounds.Length = 1 && parsed.Sounds[1].Repeat && parsed.Scare[2] = "scare1", "Legacy scare metadata parses without changing the independent audio events")
     Check(OutputPanelKeys(parsed, 3100)[3] != "idle", "Second OBS effect outlasts first")
     FileAppend("PASS " checks " Meso Control feature checks`n", "*")
 } catch as err {
@@ -284,6 +287,11 @@ TestSonionWindows() {
         ScheduleSonion(game.Hwnd, now)
         ShowSonionPhone(Sonion, now)
         Check(Sonion.CallerImage.Hwnd && DllCall("user32\GetWindowLongPtrW", "Ptr", Sonion.CallerImage.Hwnd, "Int", -16, "Ptr"), "The phone loads its bundled caller image")
+        region := DllCall("gdi32\CreateRectRgn", "Int", 0, "Int", 0, "Int", 0, "Int", 0, "Ptr")
+        try Check(DllCall("user32\GetWindowRgn", "Ptr", Sonion.Panel.Hwnd, "Ptr", region) > 0
+            && !DllCall("gdi32\PtInRegion", "Ptr", region, "Int", 0, "Int", 0)
+            && DllCall("gdi32\PtInRegion", "Ptr", region, "Int", 153, "Int", 253), "The restored handset has rounded corners instead of a rectangular window")
+        finally DllCall("gdi32\DeleteObject", "Ptr", region)
         Check(Sonion.Phase = "ringing" && GuiHwndSafe(Sonion.Dim) && GuiHwndSafe(Sonion.Panel), "Incoming call opens a dimmer and phone")
         Check(ControlGetText("Button1", "ahk_id " Sonion.Panel.Hwnd) = "Decline" && ControlGetText("Button2", "ahk_id " Sonion.Panel.Hwnd) = "Answer", "Both phone choices are clickable buttons")
         WinActivate("ahk_id " game.Hwnd)
@@ -427,7 +435,7 @@ TestSequencePicker() {
             AnswerSonion(false)
         Check(call.Phones.Length > capacity && call.Phones[1].Pager.Visible, "Overflow leaves every call ringing with page navigation")
         CycleSonionPhones()
-        Check(call.Page = 0 && GuiHwndSafe(firstPhone), "Earlier calls remain available after the screen fills")
+        Check(call.Page < SonionPhonePages(call.Phones) && GuiHwndSafe(firstPhone), "Earlier calls remain available after the screen fills")
         StopSonion()
         Check(!GuiHwndSafe(firstPhone) && !GuiHwndSafe(call.Panel), "Stop clears all ringing phones")
         TestSequence(selector, notice)
@@ -495,4 +503,102 @@ TestInputHooks() {
         Check(GameplayKeyboardHook(0, 0x100, kb) != 1, "Loadout keyboard injection is allowed")
         Check(GameplayMouseHook(0, 0x201, mouse) != 1, "Loadout mouse injection is allowed")
     } finally GameplayLock := 0
+}
+
+TestFeature611() {
+    global SharedKeys, Chat, ConfigFile, Punishments, State, OutputSpecialSounds, Test611AudioCalls, PendingAltEnterRestores
+    for duration in [100, 1000, 3000, 5000, 11000] {
+        for gap in [100, 500, 1000, 10000] {
+            plan := AltEnterPlan(duration, gap)
+            Check(plan.Count >= 2 && !Mod(plan.Count, 2), "Alt+Enter always plans an even number of presses")
+            Check(plan.Duration >= (plan.Count - 1) * gap + 35, "The final Alt+Enter key-up fits in its lifetime")
+        }
+    }
+    Check(AltEnterPlan(5000, 1000).Count = 6, "Default Alt+Enter finishes six presses at one-second intervals")
+    PendingAltEnterRestores := Map()
+    RestoreAltEnter({AltEnterCount: 2, Target: 0})
+    Check(!PendingAltEnterRestores.Count, "An even Alt+Enter run sends no extra toggle")
+    RestoreAltEnter({AltEnterCount: 1, Target: 0})
+    Check(PendingAltEnterRestores.Has(0), "An interrupted odd pair waits for its original game instead of typing into another window")
+    AdvanceAltEnterRestores()
+    Check(!PendingAltEnterRestores.Count, "Closed targets release deferred Alt+Enter restoration state")
+    Check(SendChatTabDelay(0) = 190 && SendChatTabDelay(1) = 90, "Only the final Tab gets an extra 100 ms to settle")
+    shared := SharedKeys.Keys["prismatic"]
+    SharedKeys.Keys["prismatic"] := "XButton2"
+    ApplySharedChatKeys()
+    Chat.Reset()
+    now := NowMs()
+    Check(Chat.Bindings["prismatic"] = "XButton2" && ChatRelayAction("!chat prismatic") = "prismatic", "Prismatic follows the saved shared key through the existing chat relay")
+    Check(Chat.Accept("prismatic611", "viewer", "prismatic", now, now, now - 1) = 1
+        && Chat.Take(now).Key = "XButton2", "Prismatic queues the bound mouse button")
+    SharedKeys.Keys["prismatic"] := shared
+    ApplySharedChatKeys()
+    bounds := {X: 0, Y: 0, W: 1920, H: 1080}
+    phones := []
+    first := SonionPhonePlacement(bounds, phones)
+    Check(first.X = 807 && first.Y = 287 && first.Page = 0, "First handset is centered")
+    phones.Push(first)
+    loop 18 {
+        placement := SonionPhonePlacement(bounds, phones)
+        Check(placement.X >= 0 && placement.X + 306 <= bounds.W && placement.Y >= 0 && placement.Y + 506 <= bounds.H, "Random phones stay inside gameplay")
+        for other in phones
+            if other.Page = placement.Page
+                Check(SonionPhoneFits(placement.X, placement.Y, other), "Random phones keep both button rows accessible")
+        phones.Push(placement)
+    }
+    spread := Map()
+    loop 48 {
+        placement := SonionPhonePlacement(bounds, [first])
+        spread[placement.X "|" placement.Y] := true
+    }
+    Check(spread.Count > 20, "Extra handsets use random positions instead of fixed grid slots")
+    State := EmptyState()
+    Test611AudioCalls := []
+    OutputSpecialSounds := Map()
+    now := NowMs()
+    State.Sounds := [{Id: "scare611", Name: "scare1", Repeat: false, Until: now + 1000}]
+    SyncSpecialSounds(now)
+    Check(OutputSpecialSounds.Count = 1 && Audio611Contains("volume to 1000") && Audio611Contains("play mesospecial"), "Loud scare audio plays without a Stream Output visual")
+    State.Sounds := []
+    SyncSpecialSounds(now + 1)
+    Check(!OutputSpecialSounds.Count && Audio611Contains("close mesospecial"), "Scare audio closes when gameplay ends the visual")
+    source := FileRead(A_ScriptDir "\..\Meso_Stream_Output.ahk", "UTF-8")
+    Check(!InStr(source, "DrawOutputScare") && !InStr(source, "OutputScareFrame"), "Stream Output has no jumpscare drawing path")
+    before := OutputPanelKeys(State, now)
+    State.Scare := ["scare", "scare1", now, now + 1000]
+    after := OutputPanelKeys(State, now + 1)
+    Check(before[1] = after[1] && before[3] = after[3], "Legacy scare records cannot animate output panels")
+    loop IniRead(ConfigFile, "Punishments", "Count", "0") + 0 {
+        section := "P" A_Index
+        if IniRead(ConfigFile, section, "Action", "") != "Turn Keyboard Off"
+            continue
+        IniWrite("Turn M&K Off", ConfigFile, section, "Action")
+        IniWrite("Turn M&K Off", ConfigFile, section, "Name")
+        IniWrite("6.25", ConfigFile, section, "Duration")
+        IniWrite("3", ConfigFile, section, "Weight")
+        IniWrite("Turn M&K Off", ConfigFile, "DirectRedeems", "Slot1")
+        Punishments := LoadAndMigratePunishments()
+        Check(IniRead(ConfigFile, section, "Name") = "Turn Keyboard Off" && IniRead(ConfigFile, section, "Action") = "Turn Keyboard Off", "Existing M&K punishment is renamed during upgrade")
+        Check(IniRead(ConfigFile, section, "Duration") = "6.25" && IniRead(ConfigFile, section, "Weight") = "3", "Rename preserves punishment settings")
+        Check(IsObject(DirectPunishment(1)) && DirectPunishment(1).Name = "Turn Keyboard Off", "Direct reward slots follow the renamed punishment")
+        break
+    }
+}
+
+Audio611Contains(value) {
+    global Test611AudioCalls
+    for command in Test611AudioCalls
+        if InStr(command, value)
+            return true
+    return false
+}
+
+Mci(command) {
+    global Test611AudioCalls
+    Test611AudioCalls.Push(command)
+    return 0
+}
+
+MciStatus(alias, field) {
+    return "playing"
 }

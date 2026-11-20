@@ -1,5 +1,5 @@
 SyncSpecialSounds(now) {
-    global State, OutputSpecialSounds, OutputScareFrame
+    global State, OutputSpecialSounds
     static serial := 0
     if !IsSet(OutputSpecialSounds)
         OutputSpecialSounds := Map()
@@ -7,12 +7,6 @@ SyncSpecialSounds(now) {
     for event in State.Sounds {
         if event.Until && now >= event.Until
             continue
-        visual := event.Name = "321.wav" ? "jeff" : event.Name
-        if visual = "jeff" || visual = "scare1" || visual = "scare2" {
-            if !State.Scare.Length || State.Scare[2] != visual || now >= State.Scare[4] + 0
-                || OutputScareFrame != visual "|" State.Scare[3]
-                continue
-        }
         wanted[event.Id] := true
         if OutputSpecialSounds.Has(event.Id) {
             playing := OutputSpecialSounds[event.Id]
@@ -53,23 +47,4 @@ StopOutputSpecialSounds() {
             Mci("close " alias)
         OutputSpecialSounds := Map()
     }
-}
-
-DrawOutputScare(canvas, now) {
-    global State
-    static image := 0, lastName := ""
-    record := State.Scare
-    name := record.Length ? record[2] : ""
-    if name != lastName {
-        if image
-            DllCall("gdiplus\GdipDisposeImage", "Ptr", image)
-        image := 0
-        lastName := name
-        if name != "" {
-            path := SonionUiAsset(name = "jeff" ? "sonion_jeff.png" : name ".png")
-            DllCall("gdiplus\GdipLoadImageFromFile", "WStr", path, "Ptr*", &image)
-        }
-    }
-    if name != "" && image && now < record[4] + 0
-        DrawScareFrame(canvas, image, ScareDefinition(name), now - (record[3] + 0), 1920, 1080)
 }

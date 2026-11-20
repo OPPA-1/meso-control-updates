@@ -1,5 +1,5 @@
 ﻿IsNew600Action(action) {
-    return InStr("|Turn M&K Off|Alt+Enter|Wide View|Change Mouse Sensitivity|", "|" action "|") > 0
+    return InStr("|Turn Keyboard Off|Alt+Enter|Wide View|Change Mouse Sensitivity|", "|" action "|") > 0
 }
 
 PunishmentVaries(p) {

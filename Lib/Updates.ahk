@@ -61,7 +61,7 @@ BuildUpdateSettings(gui) {
     gui.SetFont("s12 Bold cF4EDF9", "Segoe UI")
     gui.AddText("x40 y130 w700 h28", "UPDATES")
     gui.SetFont("s9 Norm cD6C9E7", "Segoe UI")
-    gui.AddText("x40 y159 w735 h21", "Meso Control " IniRead(A_ScriptDir "\version.ini", "App", "Version", "6.1.0"))
+    gui.AddText("x40 y159 w735 h21", "Meso Control " IniRead(A_ScriptDir "\version.ini", "App", "Version", "6.1.1"))
     UpdateStatusLabel := gui.AddText("x40 y180 w735 h43 cD3B7F3", Updates.Message)
     gui.AddText("x40 y239 w730 h22", "Repository  (owner/repo)")
     UpdateRepoEdit := gui.AddEdit("x40 y270 w555 h34 Background241B30 cFFFFFF", Updates.Repository)

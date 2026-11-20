@@ -8,6 +8,13 @@
 #Include Lib\WheelLabels.ahk
 #Include Lib\SlotLabels.ahk
 #Include Lib\SignalScene.ahk
+#Include Lib\SonionScream.ahk
+#Include Lib\SonionGlitch.ahk
+#Include Lib\SonionRingtone.ahk
+#Include Lib\ScareAssets.ahk
+#Include Lib\ScareAudio1.ahk
+#Include Lib\ScareAudio2.ahk
+#Include Lib\StreamScares.ahk
 RuntimeDir := A_ScriptDir "\runtime"
 DirCreate(RuntimeDir)
 IconPath := A_ScriptDir "\Meso_Icon.ico"
@@ -56,6 +63,7 @@ AudioReady := Map()
 LastSoundSync := 0
 HorrorSoundPath := A_ScriptDir "\1.wav"
 FigureSoundPath := A_ScriptDir "\2.wav"
+OutputScareFrame := ""
 FigureState := "idle"
 FigureGui := 0
 FigurePicture := 0
@@ -179,7 +187,7 @@ PublishOutputHealth() {
 }
 
 Render() {
-    global DrawBusy, Back, Front, State, LastWheelId, Disk, TickIndex, LastTickSound, LandPlayed, OutputGui, OutputClosing, OutputStopRequested, OutputRenderError, PanelKeys, GuideRects
+    global DrawBusy, Back, Front, State, LastWheelId, Disk, TickIndex, LastTickSound, LandPlayed, OutputGui, OutputClosing, OutputStopRequested, OutputRenderError, PanelKeys, GuideRects, OutputScareFrame
     if DrawBusy || OutputClosing || OutputStopRequested
         return
     DrawBusy := true
@@ -243,6 +251,7 @@ Render() {
                     DrawGuides(Back, index)
             } finally Back.Pop(saved)
         }
+        DrawOutputScare(Back, now)
         Back.Flush()
         Critical(20)
         tmp := Front
@@ -252,6 +261,7 @@ Render() {
         Critical("Off")
         DllCall("user32\InvalidateRect", "Ptr", OutputGui.Hwnd, "Ptr", 0, "Int", 0)
         DllCall("user32\UpdateWindow", "Ptr", OutputGui.Hwnd)
+        OutputScareFrame := State.Scare.Length && now < State.Scare[4] + 0 ? State.Scare[2] "|" State.Scare[3] : ""
         UpdateRenderStats(now, PerfNowMs() - started, w[2] = "spin" || s[2] = "spin")
         OutputRenderError := ""
     } catch as err {
@@ -366,13 +376,13 @@ DrawWheel(c, now, glitchElapsed := -1) {
 }
 
 DrawSpinBonus(c, title, elapsed) {
-    motion := 1 - Min(1, Max(0, elapsed / 420))
-    y := 513 + Round(38 * motion ** 3)
-    c.RoundRect(174, y, 452, 81, 18, 0xFF171127, 0xFFCFABFF, 2)
-    c.RoundRect(185, y + 11, 74, 59, 13, 0xFFA4FFDB, 0xFFE2FFF2, 1)
-    c.TextNoWrap("2×", 192, y + 15, 60, 50, 30, 0xFF233040, true)
-    c.TextNoWrap("BONUS", 274, y + 11, 330, 19, 13, 0xFFCBA8F7, true, 0)
-    DrawFittedDisplay(c, title, 274, y + 31, 330, 43, 23, 13)
+    motion := 1 - Min(1, Max(0, elapsed / 520))
+    y := 506 + Round(35 * motion ** 3)
+    c.RoundRect(106, y, 588, 108, 20, 0xFF171127, 0xFFA4FFDB, 4)
+    c.RoundRect(119, y + 13, 115, 82, 14, 0xFFA4FFDB)
+    c.TextNoWrap("2×", 126, y + 21, 102, 64, 45, 0xFF233040, true)
+    c.TextNoWrap("BONUS PUNISHMENT", 251, y + 11, 420, 28, 19, 0xFFA4FFDB, true, 0)
+    DrawFittedDisplay(c, title, 251, y + 42, 420, 53, 29, 17)
 }
 
 DrawViewerBadge(c) {
@@ -535,21 +545,41 @@ DrawActive(c, now) {
     if !items.Length
         return
     a := items[1]
+    if items.Length = 1 && a[2] = "COOLDOWN" {
+        c.RoundRect(823, 498, 1074, 144, 24, 0xFF170D24, 0xFFB88BEA, 3)
+        c.TextNoWrap("COOLDOWN", 847, 510, 1026, 38, 29, 0xFFE3C9FF, true)
+        c.TextNoWrap(TimeText(Max(0, a[3] + 0 - now)), 847, 550, 1026, 78, 57, 0xFFFFFFFF, true)
+        return
+    }
     c.RoundRect(823, 498, 1074, 144, 24, 0xFF170D24, 0xFF8151B4, 2)
     c.Rect(846, 526, 4, 86, 0xFFB681F7)
-    c.Text(a[2] = "COOLDOWN" ? "NEXT ROUND" : items.Length > 1 ? "ACTIVE PUNISHMENTS" : "ACTIVE PUNISHMENT", 868, 516, 760, 25, 13, 0xFFC4A2E5, true, 0)
+    hasBonus := false
+    for item in items
+        if item.Length >= 6 && item[6] = "1"
+            hasBonus := true
+    c.Text(hasBonus ? "2× BONUS ACTIVE" : items.Length > 1 ? "ACTIVE PUNISHMENTS" : "ACTIVE PUNISHMENT", 868, 512, 760, 30, hasBonus ? 20 : 13, hasBonus ? 0xFFA4FFDB : 0xFFC4A2E5, true, 0)
     if items.Length > 1 {
         loop Min(items.Length, 3) {
             item := items[A_Index]
             y := 544 + (A_Index - 1) * 26
-            c.Text(item[2] (item[4] != "" && item[4] != "Active" ? "  |  " item[4] : ""), 868, y, 791, 25, 17, 0xFFFFFFFF, true, 0)
+            bonus := item.Length >= 6 && item[6] = "1"
+            if bonus {
+                c.RoundRect(866, y + 1, 51, 24, 6, 0xFFA4FFDB)
+                c.TextNoWrap("2×", 870, y + 1, 43, 24, 18, 0xFF233040, true)
+            }
+            c.Text(item[2] (item[4] != "" && item[4] != "Active" ? "  |  " item[4] : ""), bonus ? 930 : 868, y, bonus ? 729 : 791, 25, 17, 0xFFFFFFFF, true, 0)
             c.Text(Format("{:.1f}s", (item[3] + 0 - now) / 1000), 1660, y, 205, 25, 17, 0xFFD2ACFF, true, 2)
         }
         if items.Length > 3
             c.Text("+" items.Length - 3, 868, 621, 750, 18, 12, 0xFFC4A2E5, true, 0)
         return
     }
-    c.Text(a[2], 866, 547, 770, 50, 30, 0xFFFFFFFF, true, 0)
+    bonus := a.Length >= 6 && a[6] = "1"
+    if bonus {
+        c.RoundRect(850, 549, 91, 53, 13, 0xFFA4FFDB)
+        c.TextNoWrap("2×", 854, 550, 83, 49, 31, 0xFF233040, true)
+    }
+    c.Text(a[2], bonus ? 958 : 866, 547, bonus ? 680 : 770, 50, 30, 0xFFFFFFFF, true, 0)
     age := Max(0, now - a[5])
     if RegExMatch(a[4], "^(High|Low)  ", &direction) {
         rise := Round(10 * (1 - Min(1, age / 420)) ** 2)
@@ -684,8 +714,8 @@ RefreshAudioSettings(force := false) {
         {Alias: "mesoland", Path: IniRead(ConfigFile, "Wheel", "LandSound", ""), Volume: IniRead(ConfigFile, "Wheel", "LandVolume", "80") + 0},
         {Alias: "mesoslottick", Path: IniRead(ConfigFile, "Slots", "TickSound", ""), Volume: IniRead(ConfigFile, "Slots", "TickVolume", "55") + 0},
         {Alias: "mesoslotland", Path: IniRead(ConfigFile, "Slots", "LandSound", ""), Volume: IniRead(ConfigFile, "Slots", "LandVolume", "80") + 0},
-        {Alias: "mesohorror", Path: HorrorSoundPath, Volume: IniRead(ConfigFile, "Audio", "SequenceVolume", IniRead(ConfigFile, "Audio", "HorrorVolume", "75")) + 0},
-        {Alias: "mesofigure", Path: FigureSoundPath, Volume: IniRead(ConfigFile, "Audio", "SequenceVolume", IniRead(ConfigFile, "Audio", "HorrorVolume", "75")) + 0}
+        {Alias: "mesohorror", Path: HorrorSoundPath, Volume: Min(100, 1.5 * (IniRead(ConfigFile, "Audio", "SequenceVolume", IniRead(ConfigFile, "Audio", "HorrorVolume", "75")) + 0))},
+        {Alias: "mesofigure", Path: FigureSoundPath, Volume: Min(100, 1.5 * (IniRead(ConfigFile, "Audio", "SequenceVolume", IniRead(ConfigFile, "Audio", "HorrorVolume", "75")) + 0))}
     ]
     for sound in sounds {
         alias := sound.Alias
@@ -803,6 +833,7 @@ MciError(code) {
 }
 
 OutputExit(reason, code) {
+    StopOutputSpecialSounds()
     global Front, Back, Disk, GdipToken, OutputGui, OutputClosing, OutputCleanupDone, DrawBusy, TimerResolutionActive, RuntimeDir, WheelHub, SpeechVoice
     if OutputCleanupDone
         return
@@ -918,6 +949,7 @@ RunRenderLoop() {
         if OutputClosing || OutputStopRequested
             break
         clockNow := NowMs()
+        ReadState(clockNow)
         if clockNow - lastAudioTick >= 1000 {
             RefreshAudioSettings()
             lastAudioTick := clockNow
@@ -948,12 +980,13 @@ RunRenderLoop() {
         now := PerfNowMs()
         if now >= nextFrame {
             Render()
-            moving := State.Wheel[2] = "spin" || State.Slots[2] = "spin"
+            moving := State.Wheel[2] = "spin" || State.Slots[2] = "spin" || State.Scare.Length
             period := moving ? 1000.0 / 60.0 : 50.0
             nextFrame += period
             if nextFrame < PerfNowMs() - period
                 nextFrame := PerfNowMs() + 1
         }
+        SyncSpecialSounds(NowMs())
         wait := nextFrame - PerfNowMs()
         if wait > 0
             DllCall("kernel32\Sleep", "UInt", Max(1, Min(10, Floor(wait))))
@@ -1307,6 +1340,7 @@ CancelFigure() {
 }
 
 StopSpecialEffects(wParam := 0, lParam := 0, msg := 0, hwnd := 0) {
+    StopOutputSpecialSounds()
     global HorrorQueue
     HorrorQueue := []
     StopHorror()

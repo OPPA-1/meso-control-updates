@@ -10,6 +10,10 @@
 #Include Lib\SonionScream.ahk
 #Include Lib\SonionGlitch.ahk
 #Include Lib\SonionRingtone.ahk
+#Include Lib\ScareAssets.ahk
+#Include Lib\ScareMedia.ahk
+#Include Lib\ScareAudio1.ahk
+#Include Lib\ScareAudio2.ahk
 #Include Lib\Draw.ahk
 #Include Lib\GlitchWheel.ahk
 #Include Lib\HorrorFlash.ahk
@@ -703,6 +707,7 @@ EngineTick() {
                 LandSpin(job, now)
         }
         AdvanceEffect(now)
+        AdvanceScares(now)
         try AdvanceSonion(now)
         catch as err {
             LogEvent("Sonion sequence: " err.Message)
@@ -1123,9 +1128,15 @@ ExistingStreamOutputPid() {
 }
 
 PublishState(force := false) {
+    global ActiveScare
+    EnsureScareState()
     global Queue, Clock, Slots, ActiveEffects, Guides, LastPublished, LastPublishTick, PublisherRevision, RuntimeDir, ScoreVisible, MesoScore, ChatScore, HorrorEvents, ViewerVisible, WheelDisplayMode, TtsEnabled, Sonion
     now := NowMs()
     body := Line("status", Queue.Count(), Queue.Paused, Guides)
+    body .= SpecialAudioState(now)
+    visibleScare := IsObject(ActiveScare) ? ActiveScare : IsObject(Sonion) && IsObject(Sonion.Scare) ? Sonion.Scare : 0
+    if IsObject(visibleScare)
+        body .= Line("scare", visibleScare.Name, visibleScare.Start, visibleScare.End)
     body .= Line("score", ScoreVisible ? 1 : 0, MesoScore, ChatScore)
     glitch := IsObject(Sonion) && !Sonion.Preview && Sonion.Phase = "glitch"
     if IsObject(Queue.Active) && Queue.Active.HasOwnProp("Pool") {
@@ -1156,7 +1167,7 @@ PublishState(force := false) {
         body .= Line("horror", event.Id, event.Due)
     if ActiveEffects.Length {
         for item in ActiveEffects
-            body .= Line("active", item.P.Name, item.End, item.Preview ? "" : item.Note, item.Start)
+            body .= Line("active", item.P.Name, item.End, item.Preview ? "" : item.Note, item.Start, item.P.HasOwnProp("BonusPair") ? 1 : 0)
     } else
         body .= PublishCooldown(now)
     if body = LastPublished && !force && now - LastPublishTick < 1000

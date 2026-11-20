@@ -9,6 +9,10 @@
 #Include ..\Lib\SonionScream.ahk
 #Include ..\Lib\SonionGlitch.ahk
 #Include ..\Lib\SonionRingtone.ahk
+#Include ..\Lib\ScareAssets.ahk
+#Include ..\Lib\ScareMedia.ahk
+#Include ..\Lib\ScareAudio1.ahk
+#Include ..\Lib\ScareAudio2.ahk
 #Include ..\Lib\Draw.ahk
 #Include ..\Lib\GlitchWheel.ahk
 #Include ..\Lib\HorrorFlash.ahk
@@ -56,7 +60,7 @@ try {
     Punishments := LoadAndMigratePunishments()
     count := punishments.Length
     Check(LoadAndMigratePunishments().Length = count, "Migration adds the new punishments once")
-    for name in ["Turn M&K Off", "Alt+Enter", "Wide View", "Change Mouse Sensitivity"] {
+    for name in ["Turn M&K Off", "Alt+Enter", "Wide View", "Change Mouse Sensitivity", "Jumpscare"] {
         matches := 0
         for p in punishments
             if p.Action = name
@@ -110,15 +114,18 @@ try {
     TestFeature603(p1, p2)
     TestSequencePicker()
     TestSendChatPicker()
+    TestScareQueue610()
     Check(DirectArguments(5, 'C:\Meso Control\Meso_Wheel_Trigger.vbs') = '//B //NoLogo "C:\Meso Control\Meso_Wheel_Trigger.vbs" --direct 5 %userName%', "Copied Streamer.bot arguments preserve the quoted path")
     state := Line("meta", 1, 1, 2000) Line("status", 0, 0, 0) Line("wheel", "idle", "", 0, 0, "", 0, 0)
     state .= Line("slots", "idle", "", 0, 0, 0, 0, 0, "", "", "", "") Line("timer", "idle", 0, 0, 0)
-    state .= Line("active", "Screen Shuffle", 3000, "Active", 2000) Line("active", "Lights Out", 4000, "Active", 2000)
+    state .= Line("active", "Screen Shuffle", 3000, "Active", 2000, 1) Line("active", "Lights Out", 4000, "Active", 2000)
     state .= Line("bonus", "Tunnel Vision", 2000) Line("glitch", 2500, 9500)
+    state .= Line("sound", "test-call", "ringring.mp3", 1, 0) Line("scare", "scare1", 2600, 3160)
     parsed := ParseOutputState(state)
     Check(parsed.Bonus = "Tunnel Vision" && parsed.GlitchEnd = 9500, "OBS receives the bonus and glitch animation")
     Check(OutputPanelKeys(parsed, 2600)[1] != OutputPanelKeys(parsed, 2650)[1], "Glitch animation refreshes the wheel panel")
-    Check(parsed.ActiveItems.Length = 2, "Both effects reach the OBS state")
+    Check(parsed.ActiveItems.Length = 2 && parsed.ActiveItems[1][6] = "1", "Both effects and the bonus badge reach the OBS state")
+    Check(parsed.Sounds.Length = 1 && parsed.Sounds[1].Repeat && parsed.Scare[2] = "scare1", "Scare video and individual looping calls reach the output process")
     Check(OutputPanelKeys(parsed, 3100)[3] != "idle", "Second OBS effect outlasts first")
     FileAppend("PASS " checks " Meso Control feature checks`n", "*")
 } catch as err {
@@ -231,6 +238,7 @@ TestFeature603(p1, p2) {
     LandSpin(job, 9000)
     Check(job.HasOwnProp("Bonus") && job.Bonus.Name != job.P.Name && ActiveEffects.Length = 2, "A bonus landing adds one distinct punishment")
     Check(ActiveEffects[1].Start = ActiveEffects[2].Start, "Both bonus effects start together")
+    Check(ActiveEffects[1].P.BonusPair && ActiveEffects[2].P.BonusPair, "Both bonus effects retain their active overlay badges")
     CancelEffects()
     ScheduleSonion(1, 2000)
     Check(Sonion.Next = 12000 && Sonion.Phase = "cue" && Sonion.Replies = 0
@@ -282,7 +290,7 @@ TestSonionWindows() {
         if WinWaitActive("ahk_id " game.Hwnd,, 1) {
             ShakeSonionPhone(Sonion, now + 100)
             AnswerSonion(false)
-            Check(Sonion.Phase = "declined" && Sonion.Next >= now + 5000 && !GuiHwndSafe(Sonion.Panel), "Decline closes the phone and defers the glitch for five seconds")
+            Check(Sonion.Phase = "ringing" && Sonion.Phones.Length = 2, "Decline adds a second phone while the first stays ringing")
         }
         StopSonion()
         ScheduleSonion(game.Hwnd, now)
@@ -297,6 +305,33 @@ TestSonionWindows() {
     } finally {
         StopSonion()
         game.Destroy()
+    }
+}
+
+TestScareQueue610() {
+    global ScareQueue, ActiveScare, SpecialSounds
+    EnsureScareState()
+    ScareQueue := []
+    event := QueueRandomScare(1, 1000)
+    Check(event.Due >= 2000 && event.Due <= 61000, "First random jumpscare is queued within a minute")
+    previous := event.Due
+    loop 40 {
+        event := QueueRandomScare(1, 1000)
+        Check(event.Due - previous >= 2000 && event.Due - previous <= 30000, "Queued scares are spaced two to thirty seconds apart")
+        previous := event.Due
+    }
+    Check(!IsObject(ActiveScare), "Queued scares do not display or play audio early")
+    CancelScares()
+    Check(!ScareQueue.Length, "Cancellation clears delayed jumpscares")
+    id := SpecialSound("ringring.mp3", true)
+    Check(InStr(SpecialAudioState(NowMs()), "ringring.mp3") && SpecialSounds.Has(id), "Ring audio is published for stream output capture")
+    StopSpecialSound(id)
+    Check(!SpecialSounds.Has(id), "Ringing stops when its call closes")
+    id := SpecialSound("scare1", false, 1)
+    SpecialAudioState(NowMs() + 2)
+    Check(!SpecialSounds.Has(id), "A finished scare cannot keep playing audio")
+    for name in ["scare1", "scare2"] {
+        Check(FileExist(SpecialAudioPath(name)) && ScareDefinition(name).Duration < 1000, "Faster scare visuals have corresponding packaged audio")
     }
 }
 
@@ -366,10 +401,14 @@ TestSequencePicker() {
         Check(call.Replies = 3 && call.Transcript.Text = SonionQuestion() "`nyes`nyes`nyes", "Preview shows all three replies")
         Check(!call.HasOwnProp("Clipboard") && DllCall("user32\GetClipboardSequenceNumber", "UInt") = clipboard, "Preview leaves the clipboard alone")
         AdvanceSonion(call.Next)
-        ClickSequenceButton("Button2", call.Panel.Hwnd, (*) => call.Phase = "answered")
-        Check(call.Phase = "answered" && GuiHwndSafe(call.Panel), "Answering the test call shows the Jeff overlay")
+        acceptedAt := NowMs()
+        ClickSequenceButton("Button2", call.Panel.Hwnd, (*) => call.Phase = "accepted")
+        Check(call.Phase = "accepted" && !call.Phones.Length && !GuiHwndSafe(call.Panel)
+            && call.Next >= acceptedAt + 5000 && call.Next <= NowMs() + 20000, "Answer clears every phone and schedules the scare five to twenty seconds later")
+        AdvanceSonion(call.Next)
+        Check(call.Phase = "answered" && IsObject(call.Scare), "The scare appears only when its delayed time arrives")
         ClickSequenceButton("Stop", call.Stage.Hwnd, (*) => !IsObject(Sonion))
-        Check(!GuiHwndSafe(call.Stage) && !GuiHwndSafe(call.Panel), "Stop closes preview windows during the scare")
+        Check(!GuiHwndSafe(call.Stage) && !GuiHwndSafe(call.Scare.Gui), "Stop closes the delayed preview scare")
         ClickSequenceButton("Test sequence", settings.Hwnd, (*) => IsObject(Sonion))
         call := Sonion
         AdvanceSonion(call.Next)
@@ -378,18 +417,19 @@ TestSequencePicker() {
             AdvanceSonion(call.Next)
         AdvanceSonion(call.Next + 31000)
         Check(call.Phase = "ringing" && GuiHwndSafe(call.Panel), "The phone keeps ringing beyond the old 30-second cutoff")
-        call.Sound := true
-        ClickSequenceButton("Button1", call.Panel.Hwnd, (*) => call.Phase = "declined")
-        Check(call.Phase = "declined" && !GuiHwndSafe(call.Panel) && !call.Sound,
-            "Declining closes the ringing preview and releases the ringtone")
-        count := ActiveEffects.Length
-        AdvanceSonion(call.Next - 1)
-        Check(call.Phase = "declined", "The preview respects the five-second delay after decline")
-        AdvanceSonion(call.Next)
-        Check(call.Phase = "glitch" && GuiHwndSafe(call.Panel) && call.GlitchMode = "wheel"
-            && ActiveEffects.Length = count, "Decline runs the selected wheel preview without live punishments")
-        AdvanceSonion(call.Deadline)
-        Check(!IsObject(Sonion) && !GuiHwndSafe(call.Stage), "The finished preview cleans up its windows")
+        firstPhone := call.Panel
+        firstSound := call.Phones[1].Sound
+        ClickSequenceButton("Button1", call.Panel.Hwnd, (*) => call.Phones.Length = 2)
+        Check(GuiHwndSafe(firstPhone) && call.Phones.Length = 2 && firstSound != call.Phones[2].Sound,
+            "Decline preserves the original phone and gives the new phone its own ringtone")
+        capacity := SonionPhoneCapacity(SonionBounds(call))
+        loop capacity
+            AnswerSonion(false)
+        Check(call.Phones.Length > capacity && call.Phones[1].Pager.Visible, "Overflow leaves every call ringing with page navigation")
+        CycleSonionPhones()
+        Check(call.Page = 0 && GuiHwndSafe(firstPhone), "Earlier calls remain available after the screen fills")
+        StopSonion()
+        Check(!GuiHwndSafe(firstPhone) && !GuiHwndSafe(call.Panel), "Stop clears all ringing phones")
         TestSequence(selector, notice)
         preview := Sonion.Stage
         ScheduleSonion(1, NowMs())

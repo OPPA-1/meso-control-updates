@@ -133,6 +133,7 @@ jobs:
           & "$app/Lib/CreateRelease.ps1" -Root $app
           $zip = "$app/Releases/Meso_Control_6_1_2_COMPLETE.zip"
           Copy-Item "$baseline/Defaults/Meso_Chaos.ini" "$baseline/Meso_Chaos.ini"
+          Add-Content "$baseline/Meso_Chaos.ini" "[Updates]`nForceAuto=0"
           New-Item -ItemType Directory -Force "$baseline/Profiles", "$baseline/Macros" | Out-Null
           Set-Content "$baseline/Profiles/test.ini" 'profile sentinel'
           Set-Content "$baseline/Macros/test.msq" 'macro sentinel'
@@ -146,6 +147,157 @@ jobs:
           if ((Get-Content "$baseline/Macros/test.msq") -ne 'macro sentinel') { throw 'Macro was modified' }
           $expected = (Get-Content "$zip.sha256" -Raw).Split(' ')[0]
           if ((Get-FileHash $zip).Hash -ne $expected) { throw 'Release checksum mismatch' }
+
+      - name: Verify quiet update relaunch and real settings controls
+        shell: pwsh
+        run: |
+          $root = "$env:RUNNER_TEMP/meso-session"
+          $zip = "$env:RUNNER_TEMP/meso/Releases/Meso_Control_6_1_2_COMPLETE.zip"
+          Expand-Archive $zip $root
+          Copy-Item "$root/Defaults/Meso_Chaos.ini" "$root/Meso_Chaos.ini"
+          Add-Content "$root/Meso_Chaos.ini" "[Updates]`nForceAuto=0"
+          & "$root/Lib/GitHubUpdateTools.ps1" -Operation StageLocal -Root $root -LocalZip $zip
+          Copy-Item "$root/Tests/Update612Session.ahk" "$root/Meso_UpdateSession612_Test.ahk"
+          $ahk = "$env:RUNNER_TEMP/ahk/AutoHotkey64.exe"
+          $job = Start-Process $ahk -ArgumentList @('/ErrorStdOut=UTF-8','"' + "$root/Meso_UpdateSession612_Test.ahk" + '"') -PassThru
+          $deadline = (Get-Date).AddSeconds(40)
+          $restored = $false
+          try {
+            while ((Get-Date) -lt $deadline) {
+              if (Test-Path "$root/session-test-error.txt") { throw (Get-Content "$root/session-test-error.txt" -Raw) }
+              if (Test-Path "$root/runtime/session-test-original.state") {
+                $original = (Get-Content "$root/runtime/session-test-original.state" -Raw).Trim().Split('|')
+                if (Test-Path "$root/runtime/controller.info") {
+                  $info = @(Get-Content "$root/runtime/controller.info")
+                  $state = Get-Content "$root/runtime/output.state" -Raw -ErrorAction SilentlyContinue
+                  $health = Get-Content "$root/runtime/output-health.info" -Raw -ErrorAction SilentlyContinue
+                  if ($info.Count -ge 3 -and [int]$info[2] -ne [int]$original[0] -and $state -match '(?m)^status\|1\|0\|1\r?
+        with:
+          name: Meso-Control-6.1.2-Windows
+          path: ${{ runner.temp }}/meso/Releases/*
+          if-no-files-found: error
+
+  publish:
+    needs: validate
+    if: false && github.repository == 'OPPA-1/meso-control-updates' && github.ref == 'refs/heads/release/6.1.2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    permissions:
+      contents: write
+    concurrency:
+      group: meso-control-612-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Meso-Control-6.1.2-Windows
+          path: release
+      - name: Publish 6.1.2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release
+          zip=Meso_Control_6_1_2_COMPLETE.zip
+          sha256sum -c "$zip.sha256"
+          if gh release view 6.1.2 >/dev/null 2>&1; then
+            echo 'Release 6.1.2 already exists. Checking its downloads.'
+          else
+            gh release create 6.1.2 "$zip" "$zip.sha256" --target "$GITHUB_SHA" \
+              --title 'Meso Control 6.1.2' \
+              --notes 'Meso Control 6.1.2 | Sliding Puzzle, Louder Scares and Automatic Updates' \
+              --draft
+            gh release edit 6.1.2 --draft=false --latest
+          fi
+      - name: Verify public updater downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          zip=Meso_Control_6_1_2_COMPLETE.zip
+          mkdir downloaded
+          cd downloaded
+          for attempt in 1 2 3 4 5; do
+            if gh api "repos/$GITHUB_REPOSITORY/releases/latest" > release.json &&
+              jq -e '.tag_name == "6.1.2" and (.draft | not) and (.prerelease | not)' release.json >/dev/null; then
+              break
+            fi
+            sleep 4
+          done
+          jq -e '.tag_name == "6.1.2" and (.draft | not) and (.prerelease | not)' release.json
+          for asset in "$zip" "$zip.sha256"; do
+            uri=$(jq -er --arg asset "$asset" '.assets[] | select(.name == $asset) | .browser_download_url' release.json)
+            curl --fail --silent --show-error --location --retry 3 "$uri" -o "$asset"
+          done
+          sha256sum -c "$zip.sha256"
+          unzip -tq "$zip"
+          python - "$zip" 63009c1f588aa1d9a03a013f8bb7665ba8e42acd66002f02d9e69b32c38de734 <<'PY'
+          import base64, hashlib, re, sys, zipfile
+          with zipfile.ZipFile(sys.argv[1]) as z:
+              source = z.read("Lib/SonionRingtone.ahk").decode("utf-8-sig").replace("\r\n", "\n")
+          chunks = re.findall(r'(?m)^\s*data \.= "([A-Za-z0-9+/=]+)"$', source)
+          sound = base64.b64decode("".join(chunks), validate=True)
+          if hashlib.sha256(sound).hexdigest() != sys.argv[2]:
+              raise SystemExit("Bundled ringtone differs from the supplied MP3")
+          print("Published ZIP contains the exact supplied ringtone")
+          PY
+          actual_portrait=$(unzip -p "$zip" Ui/sonion_ring_default.png | sha256sum | cut -d ' ' -f 1)
+          test "$actual_portrait" = 'd50ada00f786930d5ed51e7ad00a64d1f876d57dc0781053fe6584d9eb93e4d9'
+          echo 'Published ZIP contains the exact Sonion PNG'
+          unzip -p "$zip" version.ini | tr -d '\r' | grep -Fx 'Version=6.1.2'
+
+  verify-updater:
+    needs: publish
+    runs-on: windows-latest
+    timeout-minutes: 6
+    permissions:
+      contents: read
+    steps:
+      - name: Check online from the 6.1.1 updater
+        shell: powershell
+        run: |
+          $root = "$env:RUNNER_TEMP/meso-online"
+          $baseline = "$env:RUNNER_TEMP/Meso_Control_6_1_1_COMPLETE.zip"
+          Invoke-WebRequest -UseBasicParsing 'https://github.com/OPPA-1/meso-control-updates/releases/download/6.1.1/Meso_Control_6_1_1_COMPLETE.zip' -OutFile $baseline
+          if ((Get-FileHash $baseline).Hash -ne '22cb47095e25397bb0ced7e7ad94e901a8779668d92e032f068bf17f6219d2b4') { throw 'Baseline ZIP checksum mismatch' }
+          Expand-Archive $baseline $root
+          & "$root/Lib/GitHubUpdateTools.ps1" -Operation Check -Root $root -Repository OPPA-1/meso-control-updates
+          $status = Get-Content "$root/.updates/status.ini" -Raw
+          Write-Output $status
+          if ($status -notmatch 'State=ready' -or $status -notmatch 'Version=6\.1\.2') { throw 'The 6.1.1 updater did not stage 6.1.2' }
+
+ -and $state -match '(?m)^timer\|ready\|' -and $state -match 'LAST WISH' -and $health -match '^\d+\|') {
+                    $renderer = [int]$health.Split('|')[0]
+                    if ($renderer -ne [int]$original[1] -and (Get-Process -Id $renderer -ErrorAction SilentlyContinue)) {
+                      $restored = $true
+                      break
+                    }
+                  }
+                }
+              }
+              Start-Sleep -Milliseconds 150
+            }
+            if (!$restored) {
+              Get-Content "$root/runtime/Meso.log" -Tail 50 -ErrorAction SilentlyContinue
+              throw 'The automatic update did not restore the controller and stream output session'
+            }
+            if (Test-Path "$root/.updates/session.ini") { throw 'Session restore receipt was not consumed' }
+            if ((Get-Content "$root/.updates/status.ini" -Raw) -notmatch 'State=installed') { throw 'Quiet update did not finish' }
+            Write-Host 'PASS real audio and puzzle settings, output pause, automatic relaunch, queue and activity preservation'
+          } finally {
+            if (Test-Path "$root/runtime/controller.info") {
+              $info = @(Get-Content "$root/runtime/controller.info")
+              if ($info.Count -ge 3) { Stop-Process -Id ([int]$info[2]) -Force -ErrorAction SilentlyContinue }
+            }
+            if (Test-Path "$root/runtime/output-health.info") {
+              $health = Get-Content "$root/runtime/output-health.info" -Raw
+              Stop-Process -Id ([int]$health.Split('|')[0]) -Force -ErrorAction SilentlyContinue
+            }
+            Stop-Process -Id $job.Id -Force -ErrorAction SilentlyContinue
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: Meso-Control-6.1.2-Windows

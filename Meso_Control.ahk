@@ -230,6 +230,7 @@ if ResumeUpdateSession
 SetTimer(RefreshUpdateStatus, 350)
 OnMessage(0x4A, ReceiveMesoCommand)
 OnMessage(0xFF, RecordRawMouse)
+OnMessage(0x8009, (*) => EmergencyStop())
 WheelRelayInitialize()
 SetTimer(ReadWheelRelay, 75)
 SetTimer(ReadChatRelay, 65)

@@ -65,7 +65,7 @@ AdvanceSonion(now) {
     switch call.Phase {
         case "cue":
             if !call.Preview
-                call.Guard := InteractionGuard(call.Target, EmergencyStop)
+                call.Guard := InteractionGuard(call.Target, StopSonionInteraction)
             call.Flash := CreateHorrorFlash(SonionBounds(call), "DO YOU ANSWER", true)
             call.FlashStarted := now
             call.Phase := "red"
@@ -166,7 +166,7 @@ SonionBounds(call) {
 ShowSonionPhone(call, now) {
     b := SonionBounds(call)
     if !call.Preview && !IsObject(call.Guard)
-        call.Guard := InteractionGuard(call.Target, EmergencyStop)
+        call.Guard := InteractionGuard(call.Target, StopSonionInteraction)
     if !GuiHwndSafe(call.Dim) {
         call.Dim := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000020 -DPIScale", "Meso Visual Effect: Darkness")
         call.Dim.BackColor := "050208"
@@ -474,4 +474,9 @@ StopSonionSound(call) {
 PlaySonionSound(call, name, repeat := false) {
     StopSonionSound(call)
     call.Sound := SpecialSound(name, repeat)
+}
+
+StopSonionInteraction(*) {
+    StopSonion()
+    RequestInteractionEmergency()
 }

@@ -1,4 +1,4 @@
-; Temporary foreground ownership for live, interactive sequences. Previews never acquire it.
+﻿; Temporary foreground ownership for live, interactive sequences. Previews never acquire it.
 class InteractionGuard {
     __New(target, escape := 0, blockKeys := false, parentPid := 0) {
         this.Target := target, this.Escape := escape, this.BlockKeys := blockKeys
@@ -93,5 +93,14 @@ class InteractionGuard {
             && NumGet(current,0,"Int64")=NumGet(this.Rect,0,"Int64")
             && NumGet(current,8,"Int64")=NumGet(this.Rect,8,"Int64")
             DllCall("user32\ClipCursor","Ptr",this.Previous)
+    }
+}
+
+RequestInteractionEmergency(*) {
+    global RuntimeDir
+    try {
+        info := StrSplit(Trim(FileRead(RuntimeDir "\controller.info","UTF-8"),"`r`n"),"`n","`r")
+        if info.Length>=3 && WinExist("ahk_id " Integer(info[2])) && WinGetPID("ahk_id " Integer(info[2]))=Integer(info[3])
+            PostMessage(0x8009,0,0,,"ahk_id " Integer(info[2]))
     }
 }

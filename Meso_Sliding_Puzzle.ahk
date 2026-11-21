@@ -50,7 +50,7 @@ try {
     PuzzleGui.OnEvent("Close", (*) => ExitApp())
     PuzzleGui.Show("x" GX " y" GY " w" GW " h" GH)
     WinActivate("ahk_id " PuzzleGui.Hwnd)
-    Guard := InteractionGuard(PuzzleGui.Hwnd, (*) => ExitApp(), true, ParentPid)
+    Guard := InteractionGuard(PuzzleGui.Hwnd, (*) => (RequestInteractionEmergency(), ExitApp()), true, ParentPid)
     UpdateInteractionPointer(PointerOwner, true)
     RenderPuzzle(NowMs())
     PuzzleReport("ready", Moves)

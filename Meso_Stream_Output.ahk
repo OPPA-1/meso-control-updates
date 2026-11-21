@@ -1091,7 +1091,7 @@ CreateHorrorOverlay() {
     if IsObject(HorrorFlash)
         StopHorror()
     HorrorGameRectangle(&x, &y, &w, &h)
-    HorrorFlash := CreateHorrorFlash({X: x, Y: y, W: w, H: h}, "", false, WinExist("ahk_exe destiny2.exe"), StopHorror)
+    HorrorFlash := CreateHorrorFlash({X: x, Y: y, W: w, H: h}, "", false, WinExist("ahk_exe destiny2.exe"), (*) => (StopHorror(), RequestInteractionEmergency()))
 }
 
 UpdateHorror(now) {

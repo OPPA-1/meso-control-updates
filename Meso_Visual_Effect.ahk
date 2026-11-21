@@ -326,15 +326,12 @@ ResizeWideThumbnail(thumbnail, w, h, scale) {
 DCompInvoke(interfacePtr, index, args*) {
     if !interfacePtr
         throw Error("DirectComposition interface is not available")
-    vtable := NumGet(interfacePtr, "Ptr")
-    method := NumGet(vtable, index * A_PtrSize, "Ptr")
-    if !method
-        throw Error("DirectComposition method " index " is unavailable")
-    callArgs := [method, "Ptr", interfacePtr]
+    ; ComCall handles the native interface and output references without an unsafe manual vtable read.
+    callArgs := [index, interfacePtr]
     for arg in args
         callArgs.Push(arg)
     callArgs.Push("Int")
-    return DllCall(callArgs*)
+    return ComCall(callArgs*)
 }
 
 MirrorCheck(hr, operation) {

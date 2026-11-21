@@ -855,6 +855,10 @@ IsVisualEffect(action) {
 }
 
 EffectsConflict(a, b) {
+    if a = "Recorded Sequence" || b = "Recorded Sequence" {
+        other := a = "Recorded Sequence" ? b : a
+        return !IsVisualEffect(other) && other != "Change Mouse Sensitivity" && other != "Time Tax" && other != "Jumpscare"
+    }
     if a = "Sliding Puzzle" || b = "Sliding Puzzle"
         return true
     if a = b

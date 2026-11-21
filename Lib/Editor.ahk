@@ -367,7 +367,8 @@ OpenSettings(*) {
     SettingsGui.AddText("x35 y348 w65 h22", "Name")
     EditorName := SettingsGui.AddEdit("x105 y343 w343 h29 Background241B30 cFFFFFF")
     EditorEnabled := SettingsGui.AddCheckbox("x470 y343 w132 h28", "Enabled")
-    SettingsGui.AddText("x35 y390 w65 h22", "Seconds")
+    global EditorDurationLabel
+    EditorDurationLabel := SettingsGui.AddText("x35 y390 w65 h22", "Seconds")
     EditorDuration := SettingsGui.AddEdit("x105 y385 w100 h29 Background241B30 cFFFFFF")
     SettingsGui.AddText("x223 y390 w59 h22", "Weight")
     EditorWeight := SettingsGui.AddEdit("x290 y385 w85 h29 Background241B30 cFFFFFF")
@@ -639,6 +640,9 @@ UpdateEditorHint(*) {
     if !GuiHwndSafe(SettingsGui)
         return
     action := EditorAction.Text
+    global EditorDuration, EditorDurationLabel
+    EditorDuration.Visible := action != "Sliding Puzzle"
+    EditorDurationLabel.Visible := action != "Sliding Puzzle"
     global EditorRawKeys
     shared := SharedKeysForAction(action, KeyTokens(EditorRawKeys))
     hasKeys := shared.Length || InStr("|Spam Key|Exit Desktop|Return to Orbit|Send Chat|Custom Sequence|Recorded Sequence|", "|" action "|")
@@ -659,10 +663,15 @@ UpdateEditorHint(*) {
     EditorValueLabel.Text := valueLabels.Get(action, "Value")
     EditorGrid.Visible := action = "Screen Shuffle" || action = "Sliding Puzzle"
     choices := action = "Sliding Puzzle" ? ["3x3", "4x4"] : PunishmentGridChoices()
-    if EditorGrid.Visible && EditorGrid.Text != "" && !(action = "Sliding Puzzle" ? RegExMatch(EditorGrid.Text, "^[34]x[34]$") : RegExMatch(EditorGrid.Text, "^[2-5]x[2-6]$")) {
+    if EditorGrid.Visible && (!EditorGrid.HasOwnProp("GridKind") || EditorGrid.GridKind != action) {
+        selected := EditorGrid.Text
         EditorGrid.Delete()
         EditorGrid.Add(choices)
         EditorGrid.Choose(1)
+        for i, size in choices
+            if size = selected
+                EditorGrid.Choose(i)
+        EditorGrid.GridKind := action
     }
     EditorGrid.Enabled := !EditorVary.Value
     EditorValue.Visible := valueLabels.Has(action) && action != "Screen Shuffle" && action != "Sliding Puzzle"

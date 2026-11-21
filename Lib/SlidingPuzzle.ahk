@@ -7,6 +7,7 @@ StartSlidingPuzzle(item, now) {
     item.PuzzleUntil := now + 8000
     grid := PunishmentVaries(item.P) ? Random(3, 4) : SlidingPuzzleGrid(item.P.HasOwnProp("Grid") ? item.P.Grid : "3x3") = "4x4" ? 4 : 3
     cmd := UpdateQuote(A_AhkPath) " " UpdateQuote(A_ScriptDir "\Meso_Sliding_Puzzle.ahk") " " item.Target " " grid " " ProcessExist() " " UpdateQuote(item.PuzzleFile)
+    ClearHeldGameBindings()
     pid := 0
     Run(cmd, A_ScriptDir, "Hide", &pid)
     item.PuzzlePid := pid

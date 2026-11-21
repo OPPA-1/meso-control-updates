@@ -563,6 +563,7 @@ TestSequence(choice, notice, *) {
 }
 
 StopSequence(*) {
+    StopLocalScares()
     global HorrorEvents, OutputPid
     StopSonionPreview()
     HorrorEvents := []

@@ -95,7 +95,7 @@ StartScareVisual(name, target, now) {
         state.Gui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08080020 -DPIScale", "Meso Jumpscare")
         DrawScareVisual(state, now)
         state.Gui.Show("NA x" x " y" y " w" w " h" h)
-        PlayLocalScare(name = "jeff" ? "321.wav" : name, def.Duration)
+        state.LocalSound := PlayLocalScare(name = "jeff" ? "321.wav" : name, def.Duration)
         state.Sound := SpecialSound(name = "jeff" ? "321.wav" : name, false, def.Duration, false)
         return state
     } catch as err {
@@ -122,6 +122,8 @@ StopScareVisual(state) {
     if !IsObject(state)
         return
     state.End := NowMs()
+    if state.HasOwnProp("LocalSound")
+        StopLocalScare(state.LocalSound)
     StopSpecialSound(state.Sound)
     state.Sound := ""
     if GuiHwndSafe(state.Gui)

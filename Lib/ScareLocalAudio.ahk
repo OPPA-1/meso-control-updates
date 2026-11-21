@@ -26,6 +26,7 @@ PlayLocalScare(name, duration) {
         return
     }
     LocalScareSounds[alias] := {Until:NowMs()+duration, Name:name}
+    return alias
 }
 AdvanceLocalScares(now) {
     global LocalScareSounds, RuntimeDir
@@ -65,4 +66,12 @@ LocalScareLevel(name) {
         level *= Min(100,Max(0,(IsNumber(sequence) ? sequence : 75)*1.5))/100
     }
     return Round(level)
+}
+
+StopLocalScare(alias) {
+    global LocalScareSounds
+    if alias="" || !IsSet(LocalScareSounds) || !LocalScareSounds.Has(alias)
+        return
+    LocalScareMci("close " alias)
+    LocalScareSounds.Delete(alias)
 }

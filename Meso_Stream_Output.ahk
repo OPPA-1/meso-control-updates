@@ -565,12 +565,17 @@ DrawActive(c, now) {
         y := items.Length=1 ? 545 : 540+(A_Index-1)*29
         note := CompactEffectNote(item[4])
         isWaiting := note="Focus game" || note="Queued"
+        sensitivity := RegExMatch(note,"^(High|Low)  ")
         detail := isWaiting ? note : InStr(note,"Solve puzzle") ? "Solve to continue" : Format("{:.1f}s", Max(0, item[3]+0-now)/1000)
-        c.TextNoWrap(SubStr(item[2],1,50), 855, y, 1008, items.Length=1 ? 42 : 29, items.Length=1 ? 31 : 23, 0xFFFFFFFF, true)
-        if items.Length=1
-            c.TextNoWrap(note!="" && !isWaiting ? note " · " detail : detail, 855, 593, 1008, 28, 20, 0xFFD2ACFF, true)
-        else
-            c.TextNoWrap(detail, 1690, y, 168, 29, 17, 0xFFD2ACFF, true, 2)
+        pair := item.Length>=6 && item[6]="1"
+        label := (pair ? "2× " : "") SubStr(item[2],1,50)
+        c.TextNoWrap(label, 855, y, 1008, items.Length=1 ? 42 : 29, items.Length=1 ? 31 : 23, 0xFFFFFFFF, true)
+        if items.Length=1 {
+            rise := sensitivity ? Round(8*(1-Min(1,Max(0,now-item[5])/420))**2) : 0
+            color := sensitivity ? (SubStr(note,1,4)="High" ? 0xFFE0B5FF : 0xFFAFE3FA) : 0xFFD2ACFF
+            c.TextNoWrap(note!="" && !isWaiting ? note " · " detail : detail, 855, 593-rise, 1008, 28, 20, color, true)
+        } else
+            c.TextNoWrap(sensitivity ? note : detail, 1690, y, 168, 29, 17, 0xFFD2ACFF, true, 2)
     }
     if items.Length>3
         c.TextNoWrap("+" (items.Length-3) " more", 855, 623, 1008, 18, 12, 0xFFC4A2E5, true)

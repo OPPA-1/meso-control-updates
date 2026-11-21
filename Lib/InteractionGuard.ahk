@@ -51,7 +51,12 @@ class InteractionGuard {
                         DllCall("user32\AttachThreadInput", "UInt", own, "UInt", thread, "Int", false)
                 }
             }
-            WinGetClientPos(&x,&y,&w,&h,"ahk_id " this.Target)
+            dpiContext := DllCall("user32\SetThreadDpiAwarenessContext","Ptr",-4,"Ptr")
+            try WinGetClientPos(&x,&y,&w,&h,"ahk_id " this.Target)
+            finally {
+                if dpiContext
+                    DllCall("user32\SetThreadDpiAwarenessContext","Ptr",dpiContext,"Ptr")
+            }
             if w > 0 && h > 0 {
                 NumPut("Int",x,"Int",y,"Int",x+w,"Int",y+h,this.Rect)
                 DllCall("user32\ClipCursor", "Ptr", this.Rect)
@@ -168,7 +173,11 @@ RequestInteractionEmergency(*) {
     global RuntimeDir
     try {
         info := StrSplit(Trim(FileRead(RuntimeDir "\controller.info","UTF-8"),"`r`n"),"`n","`r")
-        if info.Length>=3 && WinExist("ahk_id " Integer(info[2])) && WinGetPID("ahk_id " Integer(info[2]))=Integer(info[3])
-            PostMessage(0x8009,0,0,,"ahk_id " Integer(info[2]))
+        if info.Length>=3 && DllCall("user32\IsWindow","Ptr",Integer(info[2])) {
+            pid := 0
+            DllCall("user32\GetWindowThreadProcessId","Ptr",Integer(info[2]),"UInt*",&pid)
+            if pid=Integer(info[3])
+                DllCall("user32\PostMessageW","Ptr",Integer(info[2]),"UInt",0x8009,"UPtr",0,"Ptr",0)
+        }
     }
 }

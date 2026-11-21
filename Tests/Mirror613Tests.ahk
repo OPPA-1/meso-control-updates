@@ -37,13 +37,14 @@ try {
                     throw Error("Mirror axis " axis " quadrant " i ": " Format("{:06X}",color) " expected " Format("{:06X}",expected[i]))
             }
             ; A real source change must appear in the reflected output, not a stale screenshot.
-            game[1].Opt("BackgroundCC00CC")
-            DllCall("user32\InvalidateRect","Ptr",game[1].Hwnd,"Ptr",0,"Int",true)
+            game["Static1"].Opt("BackgroundCC00CC")
+            DllCall("user32\InvalidateRect","Ptr",game["Static1"].Hwnd,"Ptr",0,"Int",true)
             Sleep(350)
             destination := axis=1 ? [600,150] : axis=2 ? [200,450] : [600,450]
             if PixelGetColor(60+destination[1],40+destination[2]) != 0xCC00CC
                 throw Error("Mirror live source did not refresh")
-            game[1].Opt("BackgroundFF0000")
+            game["Static1"].Opt("BackgroundFF0000")
+            DllCall("user32\InvalidateRect","Ptr",game["Static1"].Hwnd,"Ptr",0,"Int",true)
             FileAppend("PASS rendered mirror axis " axis ", live source refresh and Display Capture pixels`n","*")
         } finally {
             WriteAtomic(status ".cancel","cancel")

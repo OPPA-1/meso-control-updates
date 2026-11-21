@@ -967,6 +967,7 @@ RunRenderLoop() {
                 LogEvent("Screen damage stopped: " err.Message)
                 ClearScreenDamage()
             }
+            PublishRendererSequenceState(clockNow)
             lastHorrorTick := clockNow
         }
         now := PerfNowMs()
@@ -1364,4 +1365,14 @@ ResumeRendererAfterUpdate(*) {
     global OutputUpdating
     OutputUpdating := false
     RefreshAudioSettings(true)
+}
+
+PublishRendererSequenceState(now) {
+    global HorrorActive, HorrorQueue, FigureState, SignalScene, RuntimeDir
+    static last := 0
+    if now-last < 250
+        return
+    last := now
+    busy := HorrorActive || HorrorQueue.Length || FigureState!="idle" || SignalScene.Phase!="idle"
+    try WriteAtomic(RuntimeDir "\sequence-busy.state",Line(ProcessExist(),now,busy ? 1 : 0))
 }

@@ -49,13 +49,20 @@ AdvanceAltEnterRestores() {
 }
 
 SequenceBusy(now := 0) {
-    global Sonion, HorrorEvents, ScareQueue, ActiveScare
+    global Sonion, HorrorEvents, ScareQueue, ActiveScare, RuntimeDir
     if !now
         now := NowMs()
     if IsSet(Sonion) && IsObject(Sonion)
         return true
     if IsSet(ScareQueue) && ScareQueue.Length || IsSet(ActiveScare) && IsObject(ActiveScare)
         return true
+    if IsSet(RuntimeDir) {
+        try {
+            status := Fields(Trim(FileRead(RuntimeDir "\sequence-busy.state","UTF-8"),Chr(13) Chr(10)))
+            if status.Length=3 && IsNumber(status[2]) && now-status[2]>=0 && now-status[2]<1500 && status[3]="1"
+                return true
+        }
+    }
     if IsSet(HorrorEvents)
         for event in HorrorEvents
             if now < event.Due + 100000

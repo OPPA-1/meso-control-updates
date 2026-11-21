@@ -370,9 +370,8 @@ InitializeLiveMirror(w, h) {
     ResizeLiveMirror(w, h, false)
     MirrorCheck(DCompInvoke(MirrorTarget, 3, "Ptr", MirrorVisual), "Composition root")
     ReportVisual("starting", "Committing reflection")
-    cloaked := Buffer(4, 0)
-    NumPut("Int", 1, cloaked)
-    MirrorCheck(DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", mag, "UInt", 14, "Ptr", cloaked.Ptr, "UInt", 4, "Int"), "Layered magnifier cloaking")
+    ; The topmost composition tree covers the magnifier child. DWM cannot cloak a child HWND.
+    ; Keeping the source visible also lets its live surface continue updating.
     MirrorCheck(DCompInvoke(MirrorDevice, 3), "Live horizontal mirror commit")
 }
 

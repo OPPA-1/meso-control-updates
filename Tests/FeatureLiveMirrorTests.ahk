@@ -7,7 +7,7 @@ Assert(InStr(visual, "DCompInvoke(MirrorDevice, 11"), "Live layered magnifier so
 Assert(InStr(visual, "DCompInvoke(MirrorVisual, 15"), "Live visual source")
 Assert(InStr(visual, "DCompInvoke(MirrorTarget, 3"), "Composed target")
 Assert(InStr(visual, "NumPut(""Float"", -1.0"), "Horizontal reflection matrix")
-Assert(InStr(visual, "DwmSetWindowAttribute"), "Source cloak")
+Assert(!InStr(visual, "DwmSetWindowAttribute"), "No unsupported child-window cloaking")
 Assert(InStr(visual, "MagSetWindowSource"), "Continuous magnifier capture")
 Assert(InStr(visual, "InvalidateRect"), "Continuous repaint")
 Assert(!InStr(visual, "DrawMirror(") && !InStr(visual, "PrintWindow") && !InStr(visual, "SetWindowDisplayAffinity"), "No stale captures or OBS exclusion")

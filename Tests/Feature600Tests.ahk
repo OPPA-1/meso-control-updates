@@ -139,7 +139,7 @@ try {
     Check(OutputPanelKeys(parsed, 3100)[3] != "idle", "Second OBS effect outlasts first")
     FileAppend("PASS " checks " Meso Control feature checks`n", "*")
 } catch as err {
-    FileAppend("FAIL: " err.Message " (" err.File ":" err.Line ")`n", "*")
+    FileAppend("FAIL: " err.Message " (" err.File ":" err.Line ")`n" err.Stack "`n", "*")
     ExitApp(1)
 } finally {
     try DirDelete(RuntimeDir, true)
@@ -174,8 +174,14 @@ TestVbsRewards() {
             while NowMs() < deadline && packet = "" {
                 loop files inbox "\*.req", "F" {
                     path := A_LoopFileFullPath
-                    packet := FileRead(path, "UTF-8")
-                    FileDelete(path)
+                    try {
+                        candidate := FileRead(path, "UTF-8")
+                        FileDelete(path)
+                    } catch {
+                        Sleep(15)
+                        continue
+                    }
+                    packet := candidate
                     id := RegExReplace(A_LoopFileName, "\.req$", "")
                     WriteAtomic(replies "\" id ".ack", "QUEUED|Test")
                     break

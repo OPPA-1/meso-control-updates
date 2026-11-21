@@ -158,11 +158,18 @@ jobs:
           & "$root/Lib/GitHubUpdateTools.ps1" -Operation StageLocal -Root $root -LocalZip $zip
           Copy-Item "$root/Tests/Update612Session.ahk" "$root/Meso_UpdateSession612_Test.ahk"
           $ahk = "$env:RUNNER_TEMP/ahk/AutoHotkey64.exe"
-          $job = Start-Process $ahk -WorkingDirectory $root -RedirectStandardOutput "$root/session-test-stdout.txt" -RedirectStandardError "$root/session-test-stderr.txt" -ArgumentList @('/ErrorStdOut=UTF-8','"' + "$root/Meso_UpdateSession612_Test.ahk" + '"') -PassThru
+          $arguments = @('/ErrorStdOut=UTF-8','/Force')
+          $arguments += '"' + "$root/Meso_UpdateSession612_Test.ahk" + '"'
+          $job = Start-Process $ahk -WorkingDirectory $root -RedirectStandardOutput "$root/session-test-stdout.txt" -RedirectStandardError "$root/session-test-stderr.txt" -ArgumentList $arguments -PassThru
           $deadline = (Get-Date).AddSeconds(40)
           $restored = $false
           try {
             while ((Get-Date) -lt $deadline) {
+              $job.Refresh()
+              if ($job.HasExited -and !(Test-Path "$root/runtime/session-test-original.state")) {
+                Get-Content "$root/session-test-stdout.txt","$root/session-test-stderr.txt" -ErrorAction SilentlyContinue
+                throw 'The session harness exited before requesting an update'
+              }
               if (Test-Path "$root/session-test-error.txt") { throw (Get-Content "$root/session-test-error.txt" -Raw) }
               if (Test-Path "$root/runtime/session-test-original.state") {
                 $original = (Get-Content "$root/runtime/session-test-original.state" -Raw).Trim().Split('|')

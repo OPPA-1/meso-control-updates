@@ -51,6 +51,15 @@ PrepareSessionTest612() {
             throw Error("Random screen flip controls did not update")
         FileAppend("Settings verified" Chr(10),A_ScriptDir "\session-test-progress.txt")
         CloseSettings()
+        AppGui.Hide()
+        WheelControllerEnabled := true
+        Queue.Accept("emergency-hidden-window",false,NowMs(),"meso",true,1)
+        RequestInteractionEmergency()
+        deadline := NowMs()+1500
+        while WheelControllerEnabled && NowMs()<deadline
+            Sleep(20)
+        if WheelControllerEnabled || Queue.Count()
+            throw Error("Emergency stop did not reach the hidden controller")
         Queue.Accept("pending-session-612",false,NowMs(),"meso",true,2)
         Queue.Paused := false
         Queue.Completed := 7

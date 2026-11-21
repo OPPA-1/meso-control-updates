@@ -3,6 +3,8 @@
 #Include ..\Lib\Core.ahk
 #Include ..\Lib\InteractionGuard.ahk
 #Include ..\Lib\InputPacket.ahk
+#Include ..\Lib\Draw.ahk
+#Include ..\Lib\HorrorFlash.ahk
 OnError((err,mode)=>(FileAppend(err.Message " (" err.Line ")`n","*"),ExitApp(1)))
 game := Gui("-DPIScale","Guard game"), other := Gui("-DPIScale","Other monitor stand-in")
 game.Show("x40 y40 w800 h600")
@@ -10,7 +12,7 @@ other.Show("x10 y10 w400 h250")
 WinActivate("ahk_id " game.Hwnd)
 old := Buffer(16,0)
 DllCall("user32\GetClipCursor","Ptr",old)
-guard := 0
+guard := 0, flash := 0
 try {
     guard := InteractionGuard(game.Hwnd,0,true)
     WinActivate("ahk_id " other.Hwnd)
@@ -48,10 +50,23 @@ try {
     Sleep(80)
     if !WinActive("ahk_id " other.Hwnd)
         throw Error("Foreground remained locked after cleanup")
+    flash := CreateHorrorFlash({X:x,Y:y,W:w,H:h},"TUNG",false,game.Hwnd)
+    WinActivate("ahk_id " other.Hwnd)
+    Sleep(100)
+    if !WinActive("ahk_id " game.Hwnd)
+        throw Error("The live Tung text guard did not retain game focus")
+    CloseHorrorFlash(flash)
+    flash := 0
+    WinActivate("ahk_id " other.Hwnd)
+    Sleep(60)
+    if !WinActive("ahk_id " other.Hwnd)
+        throw Error("The Tung text guard did not release focus")
     FileAppend("PASS interaction focus recovery, cursor boundary, Alt+Tab block and cleanup`n","*")
 } finally {
     if IsObject(guard)
         guard.Close()
+    if IsObject(flash)
+        CloseHorrorFlash(flash)
     game.Destroy(), other.Destroy()
 }
 ExitApp()

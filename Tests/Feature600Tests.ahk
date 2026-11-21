@@ -79,6 +79,19 @@ try {
     }
     Check(IniRead(ConfigFile, "P1", "Keys") = "Numpad1", "Legacy per-effect key survives migration")
     Check(Float(IniRead(ConfigFile, "P14", "Value")) = 240, "Legacy effect value survives migration")
+    for p in punishments {
+        if p.Action="Invert Screen" {
+            Check(PunishmentVaries(p) && p.Flip="Horizontal","Invert Screen upgrades with random enabled")
+            p.Vary := false, p.Flip := "Both"
+            SavePunishmentList(punishments)
+            for saved in LoadAndMigratePunishments()
+                if saved.Action="Invert Screen"
+                    Check(!PunishmentVaries(saved) && saved.Flip="Both" && VisualStrength(saved,0)=3,"Saved flip choices survive a settings reload")
+            p.Vary := true, p.Flip := "Horizontal"
+            SavePunishmentList(punishments)
+            break
+        }
+    }
     SharedKeys := LoadSharedKeys(ConfigFile, punishments, chat)
     Check(SharedKeys.Keys.Count = 21 && SharedKeys.Keys["grenade"] = "XButton2", "All shared fields and saved mouse bind")
     IniWrite("XButton1", ConfigFile, "SharedKeybinds", "grenade")
@@ -303,6 +316,11 @@ TestSonionWindows() {
         now := NowMs()
         ScheduleSonion(game.Hwnd, now)
         ShowSonionPhone(Sonion, now)
+        distraction := Gui(,"Sonion focus test")
+        distraction.Show("w300 h200")
+        Sleep(100)
+        Check(IsObject(Sonion) && Sonion.Phase="ringing" && WinActive("ahk_id " game.Hwnd),"A second window cannot dismiss the live Sonion call")
+        distraction.Destroy()
         Check(Sonion.CallerImage.Hwnd && DllCall("user32\GetWindowLongPtrW", "Ptr", Sonion.CallerImage.Hwnd, "Int", -16, "Ptr"), "The phone loads its bundled caller image")
         region := DllCall("gdi32\CreateRectRgn", "Int", 0, "Int", 0, "Int", 0, "Int", 0, "Ptr")
         try Check(DllCall("user32\GetWindowRgn", "Ptr", Sonion.Panel.Hwnd, "Ptr", region) > 0

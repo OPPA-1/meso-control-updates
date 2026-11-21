@@ -218,7 +218,7 @@ jobs:
 
   publish:
     needs: validate
-    if: false && github.repository == 'OPPA-1/meso-control-updates' && github.ref == 'refs/heads/release/6.1.3'
+    if: github.repository == 'OPPA-1/meso-control-updates' && github.ref == 'refs/heads/release/6.1.3'
     runs-on: ubuntu-latest
     timeout-minutes: 7
     permissions:

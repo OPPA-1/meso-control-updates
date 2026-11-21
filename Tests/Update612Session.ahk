@@ -1,0 +1,59 @@
+#Requires AutoHotkey v2.0 64-bit
+; The validation job copies this harness beside Meso_Control.ahk.
+OnError((err, mode) => (FileAppend(err.Message " (" err.File ":" err.Line ")" Chr(10), A_ScriptDir "\session-test-error.txt"), ExitApp(1)))
+SetTimer(PrepareSessionTest612,-1000)
+#Include Meso_Control.ahk
+
+PrepareSessionTest612() {
+    global Updates, WheelControllerEnabled, ConfigFile, RuntimeDir, Queue, Clock, Slots, Guides, VisualHits, AppGui, OutputPid
+    global ScareLocalSlider, ScareStreamSlider, EditorAction, EditorGrid, EditorVary, EditorDuration, ScareLocalVolume, ScareStreamVolume
+    try {
+        Updates.AutoCheck := false
+        WheelControllerEnabled := false
+        OpenSettings()
+        ScareLocalSlider.Value := 0
+        ScareStreamSlider.Value := 82
+        SaveSoundSettings()
+        if ScareVolume()!=0 || ScareVolume(true)!=82
+            throw Error("Audio controls did not save independent volume values")
+        for index, action in ActionNames()
+            if action="Sliding Puzzle"
+                EditorAction.Choose(index)
+        UpdateEditorHint()
+        if EditorGrid.Text!="3x3" || EditorDuration.Visible
+            throw Error("Puzzle controls did not default to fixed 3x3 without a duration")
+        EditorVary.Value := 1
+        UpdateEditorHint()
+        if EditorGrid.Enabled
+            throw Error("Random puzzle mode must disable the fixed grid")
+        EditorVary.Value := 0
+        UpdateEditorHint()
+        EditorGrid.Choose(2)
+        if EditorGrid.Text!="4x4"
+            throw Error("Puzzle grid list must offer 4x4")
+        CloseSettings()
+        Queue.Accept("pending-session-612",false,NowMs(),"meso",true,2)
+        Queue.Paused := false
+        Queue.Completed := 7
+        Queue.Seen["already-redeemed-session-612"] := NowMs()
+        Clock.Phase := "ready"
+        Clock.Generation := 11
+        Slots.Phase := "idle", Slots.Locked := 4, Slots.Id := "activity-session-612"
+        Slots.Values := ["RAID","LAST WISH","FULL CLEAR","TITAN"]
+        Guides := true
+        VisualHits := Map("Lights Out",3,"Tunnel Vision",2,"Wide View",1)
+        AppGui.Hide()
+        OpenStreamOutput(false)
+        deadline := NowMs()+7000
+        while (!OutputPid || !StreamOutputWindow(OutputPid)) && NowMs()<deadline
+            Sleep(50)
+        if !OutputPid || !StreamOutputWindow(OutputPid)
+            throw Error("Stream output did not open")
+        WriteAtomic(RuntimeDir "\session-test-original.state",Line(ProcessExist(),OutputPid))
+        Updates.Requested := true
+        WriteAtomic(RuntimeDir "\session-test-ready.state","ready")
+    } catch as err {
+        FileAppend(err.Message " (" err.File ":" err.Line ")" Chr(10),A_ScriptDir "\session-test-error.txt")
+        ExitApp(1)
+    }
+}

@@ -55,10 +55,20 @@ PrepareSessionTest612() {
             throw Error("Stream output did not open")
         WriteAtomic(RuntimeDir "\session-test-original.state",Line(ProcessExist(),OutputPid))
         FileAppend("Requesting quiet update" Chr(10),A_ScriptDir "\session-test-progress.txt")
+        SetTimer(DumpSessionTest612,500)
+        DumpSessionTest612()
         Updates.Requested := true
         WriteAtomic(RuntimeDir "\session-test-ready.state","ready")
     } catch as err {
         FileAppend(err.Message " (" err.File ":" err.Line ")" Chr(10),A_ScriptDir "\session-test-error.txt")
         ExitApp(1)
     }
+}
+
+DumpSessionTest612() {
+    global Updates, RuntimeDir, Queue, Rounds, Recorder, DirectPending, Clock, Slots, SettingsGui, OutputPid
+    body := "can=" UpdateCanInstall(NowMs()) " sequence=" SequenceBusy() " ready=" Updates.Ready " requested=" Updates.Requested " pid=" Updates.Pid " output=" OutputPid " prepare=" Updates.OutputPrepareAt
+    body .= Chr(10) "active=" IsObject(Queue.Active) " effects=" HasEffects() " direct=" DirectPending.Length " recorder=" Recorder.Phase " round=" Rounds.Phase " clock=" Clock.Phase " slots=" Slots.Phase " settings=" GuiHwndSafe(SettingsGui)
+    body .= Chr(10) Updates.Message
+    WriteAtomic(RuntimeDir "\session-test-engine.state",body)
 }

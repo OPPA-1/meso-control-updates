@@ -356,20 +356,10 @@ InitializeLiveMirror(w, h) {
     outputStyle := DllCall("user32\GetWindowLongPtrW", "Ptr", EffectGui.Hwnd, "Int", -20, "Ptr")
     if outputStyle & 0x00080000
         throw Error("Composition host must be non-layered")
-    ReportVisual("starting", "Creating graphics device")
-    hr := DllCall("d3d11\D3D11CreateDevice", "Ptr", 0, "UInt", 1, "Ptr", 0, "UInt", 0x20, "Ptr", 0, "UInt", 0, "UInt", 7, "Ptr*", &MirrorD3DDevice, "Ptr", 0, "Ptr*", &MirrorD3DContext, "Int")
-    if hr < 0
-        hr := DllCall("d3d11\D3D11CreateDevice", "Ptr", 0, "UInt", 5, "Ptr", 0, "UInt", 0x20, "Ptr", 0, "UInt", 0, "UInt", 7, "Ptr*", &MirrorD3DDevice, "Ptr", 0, "Ptr*", &MirrorD3DContext, "Int")
-    MirrorCheck(hr, "Direct3D device initialization")
-    ReportVisual("starting", "Creating composition device")
-    ReportVisual("starting", "Reading DXGI identifier")
-    iidDXGI := MirrorGuid("{54ec77fa-1377-44e6-8c32-88fd5f44c84c}")
-    ReportVisual("starting", "Querying graphics interface")
-    MirrorCheck(DCompInvoke(MirrorD3DDevice, 0, "Ptr", iidDXGI.Ptr, "Ptr*", &MirrorDXGIDevice), "Direct3D graphics interface")
-    ReportVisual("starting", "Reading composition identifier")
+    ; Layered HWND content is already backed by DWM; no separate Direct3D device is needed.
     iidDComp := MirrorGuid("{C37EA93A-E7AA-450D-B16F-9746CB0407F3}")
     ReportVisual("starting", "Calling composition factory")
-    MirrorCheck(DllCall("dcomp\DCompositionCreateDevice2", "Ptr", MirrorDXGIDevice, "Ptr", iidDComp.Ptr, "Ptr*", &MirrorDevice, "Int"), "DirectComposition initialization")
+    MirrorCheck(DllCall("dcomp\DCompositionCreateDevice2", "Ptr", 0, "Ptr", iidDComp.Ptr, "Ptr*", &MirrorDevice, "Int"), "DirectComposition initialization")
     ReportVisual("starting", "Creating composition target")
     MirrorCheck(DCompInvoke(MirrorDevice, 6, "Ptr", EffectGui.Hwnd, "Int", 1, "Ptr*", &MirrorTarget), "Composition window target")
     MirrorCheck(DCompInvoke(MirrorDevice, 7, "Ptr*", &MirrorVisual), "Composition visual")

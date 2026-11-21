@@ -1,4 +1,4 @@
-#Requires AutoHotkey v2.0 64-bit
+﻿#Requires AutoHotkey v2.0 64-bit
 ; The validation job copies this harness beside Meso_Control.ahk.
 OnError((err, mode) => (FileAppend(err.Message " (" err.File ":" err.Line ")" Chr(10), A_ScriptDir "\session-test-error.txt"), ExitApp(1)))
 IniWrite(0,A_ScriptDir "\Meso_Chaos.ini","Updates","ForceAuto")
@@ -34,6 +34,21 @@ PrepareSessionTest612() {
         EditorGrid.Choose(2)
         if EditorGrid.Text!="4x4"
             throw Error("Puzzle grid list must offer 4x4")
+        for index, action in ActionNames()
+            if action="Invert Screen"
+                EditorAction.Choose(index)
+        UpdateEditorHint()
+        EditorVary.Value := 0
+        UpdateEditorHint()
+        for index, choice in FlipChoices() {
+            EditorGrid.Choose(index)
+            if EditorGrid.Text!=choice || !EditorGrid.Enabled
+                throw Error("Screen flip choices were not usable")
+        }
+        EditorVary.Value := 1
+        UpdateEditorHint()
+        if EditorGrid.Enabled || EditorVary.Text!="Random"
+            throw Error("Random screen flip controls did not update")
         FileAppend("Settings verified" Chr(10),A_ScriptDir "\session-test-progress.txt")
         CloseSettings()
         Queue.Accept("pending-session-612",false,NowMs(),"meso",true,2)

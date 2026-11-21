@@ -12,6 +12,8 @@
 #Include Lib\SonionGlitch.ahk
 #Include Lib\SonionRingtone.ahk
 #Include Lib\ScareAssets.ahk
+#Include Lib\ScareLocalAudio.ahk
+#Include Lib\EffectLabels.ahk
 #Include Lib\ScareAudio1.ahk
 #Include Lib\ScareAudio2.ahk
 #Include Lib\StreamScares.ahk
@@ -103,6 +105,7 @@ OnMessage(0x14, EraseOutput)
 OnMessage(0x232, SaveOutputPosition)
 OnMessage(0x8002, RequestOutputClose)
 OnMessage(0x8003, StopSpecialEffects)
+OnMessage(0x8004, (*) => Reload())
 OnExit(OutputExit)
 mon := MonitorGetCount() >= 2 ? (MonitorGetPrimary() = 1 ? 2 : 1) : MonitorGetPrimary()
 MonitorGetWorkArea(mon, &ml, &mt, &mr, &mb)
@@ -537,54 +540,36 @@ DrawActive(c, now) {
     global State
     items := []
     for row in State.ActiveItems
-        if now < row[3] + 0
+        if now < row[3]+0
             items.Push(row)
     if !items.Length
         return
-    a := items[1]
-    if items.Length = 1 && a[2] = "COOLDOWN" {
-        c.RoundRect(823, 498, 1074, 144, 24, 0xFF170D24, 0xFFB88BEA, 3)
-        c.TextNoWrap("COOLDOWN", 847, 510, 1026, 38, 29, 0xFFE3C9FF, true)
-        c.TextNoWrap(TimeText(Max(0, a[3] + 0 - now)), 847, 550, 1026, 78, 57, 0xFFFFFFFF, true)
+    c.RoundRect(823, 498, 1074, 144, 24, 0xFF170D24, 0xFF8151B4, 2)
+    if items.Length = 1 && items[1][2] = "COOLDOWN" {
+        c.TextNoWrap("COOLDOWN", 847, 505, 1026, 40, 29, 0xFFE3C9FF, true)
+        c.TextNoWrap(TimeText(Max(0, items[1][3]+0-now)), 847, 547, 1026, 82, 57, 0xFFFFFFFF, true)
         return
     }
-    c.RoundRect(823, 498, 1074, 144, 24, 0xFF170D24, 0xFF8151B4, 2)
-    c.Rect(846, 526, 4, 86, 0xFFB681F7)
-    hasBonus := false
+    bonus := false
     for item in items
         if item.Length >= 6 && item[6] = "1"
-            hasBonus := true
-    c.Text(hasBonus ? "2× BONUS ACTIVE" : items.Length > 1 ? "ACTIVE PUNISHMENTS" : "ACTIVE PUNISHMENT", 868, 512, 760, 30, hasBonus ? 20 : 13, hasBonus ? 0xFFA4FFDB : 0xFFC4A2E5, true, 0)
-    if items.Length > 1 {
-        loop Min(items.Length, 3) {
-            item := items[A_Index]
-            y := 544 + (A_Index - 1) * 26
-            bonus := item.Length >= 6 && item[6] = "1"
-            if bonus {
-                c.RoundRect(866, y + 1, 51, 24, 6, 0xFFA4FFDB)
-                c.TextNoWrap("2×", 870, y + 1, 43, 24, 18, 0xFF233040, true)
-            }
-            c.Text(item[2] (item[4] != "" && item[4] != "Active" ? "  |  " item[4] : ""), bonus ? 930 : 868, y, bonus ? 729 : 791, 25, 17, 0xFFFFFFFF, true, 0)
-            c.Text(Format("{:.1f}s", (item[3] + 0 - now) / 1000), 1660, y, 205, 25, 17, 0xFFD2ACFF, true, 2)
-        }
-        if items.Length > 3
-            c.Text("+" items.Length - 3, 868, 621, 750, 18, 12, 0xFFC4A2E5, true, 0)
-        return
+            bonus := true
+    c.TextNoWrap(bonus ? "2× BONUS ACTIVE" : items.Length>1 ? "ACTIVE PUNISHMENTS" : "ACTIVE PUNISHMENT", 849, 504, 1022, 32, bonus ? 23 : 19, bonus ? 0xFFA4FFDB : 0xFFC4A2E5, true)
+    rows := Min(items.Length, 3)
+    loop rows {
+        item := items[A_Index]
+        y := items.Length=1 ? 545 : 540+(A_Index-1)*29
+        note := CompactEffectNote(item[4])
+        isWaiting := note="Focus game" || note="Queued"
+        detail := isWaiting ? note : InStr(note,"Solve puzzle") ? "Solve to continue" : Format("{:.1f}s", Max(0, item[3]+0-now)/1000)
+        c.TextNoWrap(SubStr(item[2],1,50), 855, y, 1008, items.Length=1 ? 42 : 29, items.Length=1 ? 31 : 23, 0xFFFFFFFF, true)
+        if items.Length=1
+            c.TextNoWrap(note!="" && !isWaiting ? note " · " detail : detail, 855, 593, 1008, 28, 20, 0xFFD2ACFF, true)
+        else
+            c.TextNoWrap(detail, 1690, y, 168, 29, 17, 0xFFD2ACFF, true, 2)
     }
-    bonus := a.Length >= 6 && a[6] = "1"
-    if bonus {
-        c.RoundRect(850, 549, 91, 53, 13, 0xFFA4FFDB)
-        c.TextNoWrap("2×", 854, 550, 83, 49, 31, 0xFF233040, true)
-    }
-    c.Text(a[2], bonus ? 958 : 866, 547, bonus ? 680 : 770, 50, 30, 0xFFFFFFFF, true, 0)
-    age := Max(0, now - a[5])
-    if RegExMatch(a[4], "^(High|Low)  ", &direction) {
-        rise := Round(10 * (1 - Min(1, age / 420)) ** 2)
-        color := direction[1] = "High" ? 0xFFE0B5FF : 0xFFAFE3FA
-        c.Text(a[4], 868, 599 - rise, 760, 24, 17, color, true, 0)
-    } else
-        c.Text(a[4], 868, 599, 760, 24, 13, 0xFFAA94BD, false, 0)
-    c.Text(Format("{:.1f}s", Max(0, a[3] + 0 - now) / 1000), 1660, 535, 205, 66, 42, 0xFFD2ACFF, true, 2)
+    if items.Length>3
+        c.TextNoWrap("+" (items.Length-3) " more", 855, 623, 1008, 18, 12, 0xFFC4A2E5, true)
 }
 
 DrawTimer(c, now) {
@@ -711,8 +696,8 @@ RefreshAudioSettings(force := false) {
         {Alias: "mesoland", Path: IniRead(ConfigFile, "Wheel", "LandSound", ""), Volume: IniRead(ConfigFile, "Wheel", "LandVolume", "80") + 0},
         {Alias: "mesoslottick", Path: IniRead(ConfigFile, "Slots", "TickSound", ""), Volume: IniRead(ConfigFile, "Slots", "TickVolume", "55") + 0},
         {Alias: "mesoslotland", Path: IniRead(ConfigFile, "Slots", "LandSound", ""), Volume: IniRead(ConfigFile, "Slots", "LandVolume", "80") + 0},
-        {Alias: "mesohorror", Path: HorrorSoundPath, Volume: Min(100, 1.5 * (IniRead(ConfigFile, "Audio", "SequenceVolume", IniRead(ConfigFile, "Audio", "HorrorVolume", "75")) + 0))},
-        {Alias: "mesofigure", Path: FigureSoundPath, Volume: Min(100, 1.5 * (IniRead(ConfigFile, "Audio", "SequenceVolume", IniRead(ConfigFile, "Audio", "HorrorVolume", "75")) + 0))}
+        {Alias: "mesohorror", Path: HorrorSoundPath, Volume: ScareVolume(true)/100 * Min(100, 1.5 * (IniRead(ConfigFile, "Audio", "SequenceVolume", IniRead(ConfigFile, "Audio", "HorrorVolume", "75")) + 0))},
+        {Alias: "mesofigure", Path: FigureSoundPath, Volume: ScareVolume(true)/100 * Min(100, 1.5 * (IniRead(ConfigFile, "Audio", "SequenceVolume", IniRead(ConfigFile, "Audio", "HorrorVolume", "75")) + 0))}
     ]
     for sound in sounds {
         alias := sound.Alias
@@ -1033,7 +1018,9 @@ StartHorror(now) {
         StopHorror()
         return false
     }
+    global RuntimeDir
     HorrorStarted := NowMs()
+    WriteAtomic(RuntimeDir "\local-scare-onset.state", Line(NewId(), "1.wav", HorrorStarted, 15000))
     CancelFigure()
     FigureState := "wait"
     FigureDue := HorrorStarted + 20000
@@ -1132,6 +1119,8 @@ StartFigureMajor(now) {
         FigureState := "idle"
         return
     }
+    global RuntimeDir
+    WriteAtomic(RuntimeDir "\local-scare-onset.state", Line(NewId(), "2.wav", now, 7000))
     FigureStarted := now
     FigureEnd := now + 7000
     FigureState := "major"
@@ -1210,7 +1199,9 @@ ProcessFigure(now) {
             Mci("stop mesofigure")
             DestroyFigureWindow()
             FigureState := "stalk"
-            FigureStarted := now
+            global RuntimeDir
+    WriteAtomic(RuntimeDir "\local-scare-onset.state", Line(NewId(), "2.wav", now, 7000))
+    FigureStarted := now
             FigureEnd := now + 15000
             FigureNext := now + Random(400, 1550)
             FigureVisibleUntil := 0

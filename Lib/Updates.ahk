@@ -2,8 +2,8 @@
     global Updates, ConfigFile
     DirCreate(A_ScriptDir "\.updates")
     repository := IniRead(ConfigFile, "Updates", "GitHubRepo", "OPPA-1/meso-control-updates")
-    auto := IniRead(ConfigFile, "Updates", "AutoCheck", "0") = "1"
-    Updates := {Pid: 0, Operation: "", LastCheck: auto ? NowMs() - 43200000 : NowMs(), AutoCheck: auto, Ready: FileExist(A_ScriptDir "\.updates\ready.json") != "", Requested: false, Applying: false, StartedAt: 0, Message: repository = "" ? "Repository not set" : "Ready", Version: "", Repository: repository}
+    auto := IniRead(ConfigFile, "Updates", "ForceAuto", "1") = "1"
+    Updates := {Pid: 0, Operation: "", LastCheck: auto ? NowMs() - 600000 : NowMs(), AutoCheck: auto, Ready: FileExist(A_ScriptDir "\.updates\ready.json") != "", Requested: false, Applying: false, StartedAt: 0, Message: repository = "" ? "Repository not set" : "Ready", Version: "", Repository: repository}
     state := IniRead(A_ScriptDir "\.updates\status.ini", "Update", "State", "")
     if state = "installed" || state = "repaired"
         Updates.Message := IniRead(A_ScriptDir "\.updates\status.ini", "Update", "Message", Updates.Message)
@@ -61,7 +61,7 @@ BuildUpdateSettings(gui) {
     gui.SetFont("s12 Bold cF4EDF9", "Segoe UI")
     gui.AddText("x40 y130 w700 h28", "UPDATES")
     gui.SetFont("s9 Norm cD6C9E7", "Segoe UI")
-    gui.AddText("x40 y159 w735 h21", "Meso Control " IniRead(A_ScriptDir "\version.ini", "App", "Version", "6.1.1"))
+    gui.AddText("x40 y159 w735 h21", "Meso Control " IniRead(A_ScriptDir "\version.ini", "App", "Version", "6.1.2"))
     UpdateStatusLabel := gui.AddText("x40 y180 w735 h43 cD3B7F3", Updates.Message)
     gui.AddText("x40 y239 w730 h22", "Repository  (owner/repo)")
     UpdateRepoEdit := gui.AddEdit("x40 y270 w555 h34 Background241B30 cFFFFFF", Updates.Repository)
@@ -74,7 +74,7 @@ BuildUpdateSettings(gui) {
     UpdateInstallButton := gui.AddButton("x530 y326 w246 h40", "Install update")
     UpdateInstallButton.Enabled := Updates.Ready
     UpdateInstallButton.OnEvent("Click", RequestUpdateInstall)
-    UpdateAutoCheck := gui.AddCheckbox("x40 y390 w700 h29", "Check for updates every 12 hours")
+    UpdateAutoCheck := gui.AddCheckbox("x40 y390 w700 h29", "Always Check & Force new updates")
     UpdateAutoCheck.Value := Updates.AutoCheck
     UpdateAutoCheck.OnEvent("Click", SaveUpdatePreferences)
     gui.SetFont("s9 Bold cD6C9E7", "Segoe UI")
@@ -104,21 +104,21 @@ SaveUpdateRepository(*) {
     }
     Updates.Repository := repository
     UpdateRepoEdit.Value := repository
-    Updates.LastCheck := NowMs() - 43200000
+    Updates.LastCheck := NowMs() - 600000
     Updates.Message := "Repository saved"
 }
 
 SaveUpdatePreferences(*) {
     global Updates, UpdateAutoCheck, ConfigFile
     selected := UpdateAutoCheck.Value = 1
-    try MesoIniWrite(selected ? 1 : 0, ConfigFile, "Updates", "AutoCheck")
+    try MesoIniWrite(selected ? 1 : 0, ConfigFile, "Updates", "ForceAuto")
     catch as err {
         Updates.Message := "Could not save update preference: " err.Message
         return
     }
     Updates.AutoCheck := selected
-    Updates.LastCheck := selected ? NowMs() - 43200000 : NowMs()
-    Updates.Message := selected ? "Auto-check enabled" : "Auto-check disabled"
+    Updates.LastCheck := selected ? NowMs() - 600000 : NowMs()
+    Updates.Message := selected ? "Automatic updates on · Every 10 minutes" : "Automatic updates off"
 }
 
 CheckUpdatesNow(*) {
@@ -152,15 +152,16 @@ RequestUpdateInstall(*) {
         Updates.Message := "Check online or choose a local ZIP first."
         return
     }
-    if MsgBox("Install this update? Meso Control will restart automatically. Your settings and recordings will be kept.", "Install Meso Control update", "YesNo Default2 Icon?") != "Yes"
-        return
     Updates.Requested := true
     Updates.Message := "Update requested. It will install after all active rounds and effects finish."
 }
 
 UpdateCanInstall(now) {
     global Queue, Rounds, Slots, Clock, Recorder, HorrorEvents, DirectPending
-    if IsObject(Queue.Active) || Queue.Count() || HasEffects() || DirectPending.Length || Recorder.Phase != "idle" || Slots.Phase = "spin" || Clock.Phase = "prep" || Clock.Phase = "activity" || Rounds.Phase = "running" || Rounds.Cooling(now)
+    global SettingsGui, PendingAltEnterRestores
+    if GuiHwndSafe(SettingsGui) || SequenceBusy(now) || IsSet(PendingAltEnterRestores) && PendingAltEnterRestores.Count
+        return false
+    if IsObject(Queue.Active) || HasEffects() || DirectPending.Length || Recorder.Phase != "idle" || Slots.Phase = "spin" || Clock.Phase = "prep" || Clock.Phase = "activity" || Rounds.Phase = "running" || Rounds.Cooling(now)
         return false
     for event in HorrorEvents
         if now < event.Due + 100000
@@ -219,26 +220,27 @@ UpdatesTick(now) {
     global Updates, OutputPid, OutputEnabled, Queue, ConfigFile
     if !IsSet(Updates)
         return false
+    if Updates.AutoCheck && Updates.Ready
+        Updates.Requested := true
     if !Updates.Pid && Updates.Requested && Updates.Ready && UpdateCanInstall(now) {
-        Queue.Paused := true
         try {
             SaveAppSettings()
             SavePending()
+            SaveUpdateSession()
         } catch as err {
             Updates.Requested := false
             Updates.Message := "Cannot save session before updating: " err.Message
             return false
         }
-        extras := " -Interpreter " UpdateQuote(A_AhkPath) " -ControllerPid " ProcessExist() " -RendererPid " OutputPid (OutputEnabled ? " -ResumeOutput" : "")
+        extras := " -Interpreter " UpdateQuote(A_AhkPath) " -ControllerPid " ProcessExist() " -RendererPid 0 -KeepRenderer" (OutputEnabled ? " -ResumeOutput" : "")
         if RunUpdateHelper("Apply", extras) {
             Updates.Requested := false
             Updates.Applying := true
-            CloseStreamOutput()
             ExitApp()
             return true
         }
     }
-    if !Updates.Pid && Updates.AutoCheck && !Updates.Ready && !Updates.Requested && Updates.Repository != "" && now - Updates.LastCheck >= 43200000 {
+    if !Updates.Pid && Updates.AutoCheck && !Updates.Ready && !Updates.Requested && Updates.Repository != "" && now - Updates.LastCheck >= 600000 {
         Updates.LastCheck := now
         RunUpdateHelper("Check", " -Repository " UpdateQuote(Updates.Repository))
     }
@@ -269,7 +271,7 @@ RepairInterruptedUpdate(*) {
         Updates.Message := "Cannot save session before repair: " err.Message
         return
     }
-    if RunUpdateHelper("Repair", " -Interpreter " UpdateQuote(A_AhkPath) " -ControllerPid " ProcessExist() " -RendererPid " OutputPid (OutputEnabled ? " -ResumeOutput" : "")) {
+    if RunUpdateHelper("Repair", " -Interpreter " UpdateQuote(A_AhkPath) " -ControllerPid " ProcessExist() " -RendererPid 0 -KeepRenderer" (OutputEnabled ? " -ResumeOutput" : "")) {
         CloseStreamOutput()
         ExitApp()
     }
@@ -298,10 +300,85 @@ RevertPreviousUpdate(*) {
         Queue.Paused := false
         return
     }
-    extras := " -Interpreter " UpdateQuote(A_AhkPath) " -ControllerPid " ProcessExist() " -RendererPid " OutputPid (OutputEnabled ? " -ResumeOutput" : "")
+    extras := " -Interpreter " UpdateQuote(A_AhkPath) " -ControllerPid " ProcessExist() " -RendererPid 0 -KeepRenderer" (OutputEnabled ? " -ResumeOutput" : "")
     if RunUpdateHelper("Revert", extras) {
         CloseStreamOutput()
         ExitApp()
     }
     Queue.Paused := false
+}
+
+SaveUpdateSession() {
+    global Queue, AppGui, Slots, Clock, OutputEnabled, OutputPid, Guides, VisualHits, RuntimeDir
+    WinGetPos(&x, &y, &w, &h, "ahk_id " AppGui.Hwnd)
+    visible := DllCall("user32\IsWindowVisible", "Ptr", AppGui.Hwnd, "Int")
+    nl := Chr(10)
+    text := "[Session]" nl "SavedAt=" NowMs() nl "Paused=" (Queue.Paused ? 1 : 0) nl "Completed=" Queue.Completed nl "X=" x nl "Y=" y nl "Visible=" visible nl "Output=" (OutputEnabled ? 1 : 0) nl "Guides=" (Guides ? 1 : 0) nl
+    text .= "[Clock]" nl "Phase=" Clock.Phase nl "Generation=" Clock.Generation nl
+    text .= "[Slots]" nl "Phase=" Slots.Phase nl "Locked=" Slots.Locked nl "Id=" Slots.Id nl
+    for i, value in Slots.Values
+        text .= "Value" i "=" value nl
+    text .= "[VisualHits]" nl
+    for action, count in VisualHits
+        text .= action "=" count nl
+    WriteAtomic(A_ScriptDir "\.updates\session.ini", text)
+    seen := ""
+    for id, tick in Queue.Seen
+        seen .= Line(id, tick)
+    WriteAtomic(RuntimeDir "\update-seen.state", seen)
+}
+RestoreUpdateSession() {
+    global Queue, AppGui, Slots, Clock, OutputEnabled, OutputPid, Guides, VisualHits, RuntimeDir, OutputCheck, GuideCheck, OutputReloadUntil
+    path := A_ScriptDir "\.updates\session.ini"
+    if !FileExist(path)
+        return false
+    try {
+        age := NowMs() - Integer(IniRead(path, "Session", "SavedAt", "0"))
+        if age < 0 || age > 600000
+            return false
+        Queue.Paused := IniRead(path, "Session", "Paused", "0") = "1"
+        Queue.Completed := Integer(IniRead(path, "Session", "Completed", "0"))
+        Guides := IniRead(path, "Session", "Guides", "0") = "1"
+        OutputEnabled := IniRead(path, "Session", "Output", "0") = "1"
+        OutputPid := OutputEnabled ? ExistingStreamOutputPid() : 0
+        if IsSet(OutputCheck)
+            OutputCheck.Value := OutputEnabled
+        if IsSet(GuideCheck)
+            GuideCheck.Enabled := OutputEnabled
+        if OutputPid {
+            renderer := StreamOutputWindow(OutputPid)
+            OutputReloadUntil := NowMs()+5000
+            if renderer
+                SetTimer((*) => PostMessage(0x8004, 0, 0,, "ahk_id " renderer), -800)
+        }
+        Clock.Phase := IniRead(path, "Clock", "Phase", "idle") = "ready" ? "ready" : "idle"
+        Clock.Generation := Integer(IniRead(path, "Clock", "Generation", "0"))
+        Slots.Phase := "idle"
+        Slots.Locked := Integer(IniRead(path, "Slots", "Locked", "0"))
+        Slots.Id := IniRead(path, "Slots", "Id", "")
+        loop 4
+            Slots.Values[A_Index] := IniRead(path, "Slots", "Value" A_Index, "")
+        for action in ["Lights Out", "Tunnel Vision", "Wide View"]
+            VisualHits[action] := Integer(IniRead(path, "VisualHits", action, "0"))
+        try {
+            for row in StrSplit(FileRead(RuntimeDir "\update-seen.state", "UTF-8"), Chr(10)) {
+                f := Fields(row)
+                if f.Length = 2 && IsNumber(f[2])
+                    Queue.Seen[f[1]] := f[2]+0
+            }
+            FileDelete(RuntimeDir "\update-seen.state")
+        }
+        x := Integer(IniRead(path, "Session", "X", "0")), y := Integer(IniRead(path, "Session", "Y", "0"))
+        WinMove(x, y,,, "ahk_id " AppGui.Hwnd)
+        if IniRead(path, "Session", "Visible", "1") = "1"
+            AppGui.Show("NA")
+        else
+            AppGui.Hide()
+        return true
+    } catch as err {
+        LogEvent("Update session: " err.Message)
+        return false
+    } finally {
+        try FileDelete(path)
+    }
 }

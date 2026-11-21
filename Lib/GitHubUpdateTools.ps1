@@ -6,6 +6,7 @@
     [string]$Interpreter = '',
     [int]$ControllerPid = 0,
     [int]$RendererPid = 0,
+    [switch]$KeepRenderer,
     [switch]$ResumeOutput
 )
 $ErrorActionPreference = 'Stop'
@@ -265,6 +266,7 @@ function RestartController {
     $script = Join-Path $Root 'Meso_Control.ahk'
     if (-not [IO.File]::Exists($script)) { throw 'Updated Meso Control script is missing' }
     $args = '"' + $script + '"'
+    if ($KeepRenderer) { $args += ' --resume-session' }
     if ($ResumeOutput) { $args += ' --restore-output' }
     $launched = Start-Process -FilePath $Interpreter -ArgumentList $args -WorkingDirectory $Root -PassThru -ErrorAction Stop
     Start-Sleep -Milliseconds 800
@@ -331,7 +333,7 @@ try {
         }
         'Apply' {
             WaitProcess $ControllerPid
-            WaitProcess $RendererPid
+            if (!$KeepRenderer) { WaitProcess $RendererPid }
             Rollback
             $ready = ReadJson (Join-Path $Work 'ready.json')
             if ($ready.Schema -ne 1 -or $ready.Stage -notmatch '^stage-[a-f0-9]{32}$' -or $ready.ArchiveSha256 -notmatch '^[a-f0-9]{64}$') { throw 'Invalid staged release' }
@@ -378,13 +380,13 @@ try {
         }
         'Revert' {
             WaitProcess $ControllerPid
-            WaitProcess $RendererPid
+            if (!$KeepRenderer) { WaitProcess $RendererPid }
             RevertPreviousTransaction
             RestartController
         }
         'Repair' {
             WaitProcess $ControllerPid
-            WaitProcess $RendererPid
+            if (!$KeepRenderer) { WaitProcess $RendererPid }
             Rollback
             Status 'repaired' 'Recovered from the interrupted update'
             RestartController

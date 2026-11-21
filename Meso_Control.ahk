@@ -20,6 +20,11 @@
 #Include Lib\HorrorFlash.ahk
 #Include Lib\GameplayInput.ahk
 #Include Lib\Sensitivity.ahk
+#Include Lib\SlidingPuzzle.ahk
+#Include Lib\PuzzleModel.ahk
+#Include Lib\InteractionPointer.ahk
+#Include Lib\ScareLocalAudio.ahk
+#Include Lib\EffectLabels.ahk
 #Include Lib\MacroCodec.ahk
 #Include Lib\Recorder.ahk
 #Include Lib\Editor.ahk
@@ -37,7 +42,10 @@
 AppName := "Meso Control"
 RestartInTray := false
 RestoreOutputAfterUpdate := false
+ResumeUpdateSession := false
 for argument in A_Args {
+    if argument = "--resume-session"
+        ResumeUpdateSession := true, RestartInTray := true
     if argument = "--background"
         RestartInTray := true
     if argument = "--restore-output"
@@ -182,6 +190,8 @@ SlotLandSoundPath := IniRead(ConfigFile, "Slots", "LandSound", "")
 SlotTickVolume := IniRead(ConfigFile, "Slots", "TickVolume", "55") + 0
 SlotLandVolume := IniRead(ConfigFile, "Slots", "LandVolume", "80") + 0
 SequenceVolume := Max(0, Min(100, Integer(IniRead(ConfigFile, "Audio", "SequenceVolume", IniRead(ConfigFile, "Audio", "HorrorVolume", "75")))))
+ScareLocalVolume := ScareVolume()
+ScareStreamVolume := ScareVolume(true)
 HorrorVolume := SequenceVolume
 FigureVolume := SequenceVolume
 TtsVolume := Max(0, Min(100, Integer(IniRead(ConfigFile, "Audio", "TtsVolume", "80"))))
@@ -212,6 +222,8 @@ Slots := {Phase: "idle", Start: 0, Locked: 0, Reel: 0, Mode: false, Values: ["",
 RestorePending()
 BuildMainWindow()
 InitUpdates()
+if ResumeUpdateSession
+    RestoreUpdateSession()
 SetTimer(RefreshUpdateStatus, 350)
 OnMessage(0x4A, ReceiveMesoCommand)
 OnMessage(0xFF, RecordRawMouse)
@@ -664,6 +676,8 @@ EligiblePunishments() {
     for p in Punishments {
         if !p.Enabled || p.Weight <= 0
             continue
+        if p.Action = "Alt+Enter" && SequenceBusy()
+            continue
         if p.Action = "Chat Control" && !ChatEnabled
             continue
         if p.Action = "Time Tax" && (Clock.Phase != "activity" || Clock.Remaining(NowMs()) <= 0)
@@ -710,6 +724,7 @@ EngineTick() {
         AdvanceAltEnterRestores()
         AdvanceEffect(now)
         AdvanceScares(now)
+        AdvanceLocalScares(now)
         try AdvanceSonion(now)
         catch as err {
             LogEvent("Sonion sequence: " err.Message)
@@ -1028,6 +1043,20 @@ CheckStreamOutput() {
         return
     OutputManagementBusy := true
     try {
+        global OutputReloadUntil
+        if IsSet(OutputReloadUntil) && OutputReloadUntil {
+            candidate := ExistingStreamOutputPid()
+            if candidate && candidate != OutputPid && ProcessExist(candidate) {
+                OutputPid := candidate
+                OutputReloadUntil := 0
+            } else if NowMs() < OutputReloadUntil
+                return
+            else {
+                OutputReloadUntil := 0
+                if !ProcessExist(OutputPid)
+                    OutputPid := 0
+            }
+        }
         if !OutputPid
             OutputPid := ExistingStreamOutputPid()
         if OutputPid {
@@ -1165,7 +1194,7 @@ PublishState(force := false) {
         body .= Line("horror", event.Id, event.Due)
     if ActiveEffects.Length {
         for item in ActiveEffects
-            body .= Line("active", item.P.Name, item.End, item.Preview ? "" : item.Note, item.Start, item.P.HasOwnProp("BonusPair") ? 1 : 0)
+            body .= Line("active", item.P.Name, item.End, item.Preview ? "" : CompactEffectNote(item.Note), item.Start, item.P.HasOwnProp("BonusPair") ? 1 : 0)
     } else
         body .= PublishCooldown(now)
     if body = LastPublished && !force && now - LastPublishTick < 1000
@@ -1183,6 +1212,7 @@ PublishState(force := false) {
 
 ScheduleHorror(due) {
     global HorrorEvents
+    CancelSequenceAltEnter()
     HorrorEvents.Push({Id: NewId(), Due: due})
     PublishState(true)
     LogEvent("Sequence scheduled")
@@ -1203,6 +1233,9 @@ SaveAppSettings() {
     MesoIniWrite(LandVolume, ConfigFile, "Wheel", "LandVolume")
     MesoIniWrite(ViewerVisible ? 1 : 0, ConfigFile, "Wheel", "ViewerVisible")
     MesoIniWrite(WheelDisplayMode, ConfigFile, "Wheel", "DisplayMode")
+    global ScareLocalVolume, ScareStreamVolume
+    MesoIniWrite(ScareLocalVolume, ConfigFile, "Audio", "ScareVolume")
+    MesoIniWrite(ScareStreamVolume, ConfigFile, "Audio", "ScareOutputVolume")
     MesoIniWrite(SequenceVolume, ConfigFile, "Audio", "SequenceVolume")
     MesoIniWrite(SequenceVolume, ConfigFile, "Audio", "HorrorVolume")
     MesoIniWrite(SequenceVolume, ConfigFile, "Audio", "FigureVolume")
@@ -1290,7 +1323,7 @@ OpenInteractDelay(*) {
 }
 
 Shutdown(reason, code) {
-    global Closing, Refreshing, Queue, RuntimeDir, SharedLargeIcon, SharedSmallIcon
+    global Closing, Refreshing, Queue, RuntimeDir, SharedLargeIcon, SharedSmallIcon, Updates
     if Closing
         return
     Closing := true
@@ -1312,7 +1345,8 @@ Shutdown(reason, code) {
     try SaveAppSettings()
     if !Refreshing
         try SavePending()
-    CloseStreamOutput()
+    if !IsSet(Updates) || !Updates.Applying
+        CloseStreamOutput()
     try FileDelete(RuntimeDir "\controller.info")
 }
 

@@ -36,9 +36,9 @@ function Check-Wave([byte[]]$Bytes, [double]$Seconds, [string]$Name) {
         $peak = [Math]::Max($peak, [Math]::Abs($sample))
     }
     $db = 20 * [Math]::Log10([Math]::Sqrt($sum / ($samples.Length / 2)))
-    Check ($db -ge -11 -and $db -le -6 -and $peak -lt 0.951) "$Name loud normalized audio without clipping"
+    Check ($db -ge -4 -and $db -le -2 -and $peak -lt 0.991) "$Name loud normalized audio without clipping"
 }
-foreach ($spec in @(@{N=1;W=384;H=288;Frames=14;Seconds=0.560}, @{N=2;W=384;H=384;Frames=15;Seconds=0.303})) {
+foreach ($spec in @(@{N=1;W=384;H=288;Frames=14;Seconds=0.840})) {
     $image = [Drawing.Bitmap]::FromFile((Join-Path $Root "Ui/scare$($spec.N).png"))
     try {
         Check ($image.Width -eq $spec.W * 4 -and $image.Height -eq [Math]::Ceiling($spec.Frames / 4.0) * $spec.H) 'Scare sprite sheet dimensions'
@@ -56,6 +56,13 @@ foreach ($spec in @(@{N=1;W=384;H=288;Frames=14;Seconds=0.560}, @{N=2;W=384;H=38
     } finally { $image.Dispose() }
     Check-Wave (Embedded "ScareAudio$($spec.N)") $spec.Seconds "Jumpscare $($spec.N)"
 }
+$omni = [Drawing.Bitmap]::FromFile((Join-Path $Root 'Ui/omni.png'))
+try {
+    Check ($omni.Width -eq 1227 -and $omni.Height -eq 1281) 'Omni dimensions'
+    Check ($omni.GetPixel(0,0).A -eq 0) 'Omni white background is transparent'
+} finally { $omni.Dispose() }
+Check (!(Test-Path (Join-Path $Root 'Ui/scare2.png'))) 'FNAF 2 visual is removed'
+Check-Wave (Embedded 'ScareAudio2') 0.303 'Omni linked 4124 audio'
 Check-Wave (Embedded 'SonionScream') 3.2 'Sonion answer scare'
 Check-Wave ([IO.File]::ReadAllBytes((Join-Path $Root '1.wav'))) 15 'Tung'
 Check-Wave ([IO.File]::ReadAllBytes((Join-Path $Root '2.wav'))) 7 'Tung figure'

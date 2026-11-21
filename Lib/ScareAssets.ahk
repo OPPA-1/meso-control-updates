@@ -1,8 +1,10 @@
 SpecialAudioPath(name) {
     global RuntimeDir
+    if name = "1.wav" || name = "2.wav"
+        return A_ScriptDir "\" name
     if name = "scare1" || name = "scare2" {
         data := name = "scare1" ? ScareAudio1Data() : ScareAudio2Data()
-        return DecodeScareAudio(RuntimeDir "\" name "-610.wav", data)
+        return DecodeScareAudio(RuntimeDir "\" name "-612.wav", data)
     }
     return SonionMediaFile(RuntimeDir, name)
 }
@@ -24,8 +26,8 @@ DecodeScareAudio(path, data) {
 
 ScareDefinition(name) {
     switch name {
-        case "scare1": return {Frames: 14, Fps: 25, W: 384, H: 288, Duration: 560}
-        case "scare2": return {Frames: 15, Fps: 49.5, W: 384, H: 384, Duration: 303}
+        case "scare1": return {Frames: 14, Fps: 50/3, W: 384, H: 288, Duration: 840}
+        case "scare2": return {Frames: 1, Fps: 1, W: 1227, H: 1281, Duration: 1000}
         case "jeff": return {Frames: 1, Fps: 1, W: 760, H: 427, Duration: 3200}
     }
     throw Error("Unknown jumpscare")
@@ -55,7 +57,7 @@ SonionMediaFile(dir, name) {
         data := SonionRingtoneData()
     } else
         data := name = "321.wav" ? SonionScreamData() : SonionGlitchData()
-    path := dir "\sonion-610-" name
+    path := dir "\sonion-612-" name
     if FileExist(path)
         return path
     size := 0

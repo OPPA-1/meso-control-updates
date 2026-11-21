@@ -74,15 +74,15 @@ CheckSensitivityWorker(item, now) {
         BlockEffect(SubStr(state, 7), now)
         return
     }
-    fields := StrSplit(state, "|")
-    if fields[1] = "ready" && fields.Length = 3 && !item.SensitivityReady {
+    fields := SensitivityStatusFields(state)
+    if fields.Length = 3 && fields[1] = "ready" && IsNumber(fields[2]) && IsNumber(fields[3]) && fields[3] >= fields[2] && !item.SensitivityReady {
         item.SensitivityReady := true
         item.Start := Integer(fields[2])
         item.End := Integer(fields[3])
         multiplier := item.Sensitivity
         item.Note := (multiplier > 1 ? "High" : multiplier < 1 ? "Low" : "Normal") "  " multiplier "x"
         LogEvent("Raw Accel active: " item.Note)
-    } else if fields[1] = "restored" {
+    } else if fields.Length = 1 && fields[1] = "restored" {
         item.End := Min(item.End, now)
     }
     if state = "" && !ProcessExist(item.SensitivityPid)
@@ -154,4 +154,14 @@ CheckRawAccelSetup(dialog, status, button, path, pid) {
     try FileDelete(path)
     button.Enabled := true
     return true
+}
+
+SensitivityStatusFields(state) {
+    state := Trim(state, Chr(13) Chr(10) " " Chr(0xFEFF))
+    fields := StrSplit(state, "|")
+    if !fields.Length
+        return []
+    if fields[1] = "ready" && (fields.Length != 3 || !IsNumber(fields[2]) || !IsNumber(fields[3]))
+        return []
+    return fields
 }

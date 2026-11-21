@@ -104,6 +104,7 @@ DefaultPunishments() {
         {Name: "Super Burn", Enabled: true, Duration: 3, Weight: 2, Action: "Use Super", Keys: "f", Value: 0},
         {Name: "Bounce House", Enabled: true, Duration: 7, Weight: 5, Action: "Spam Jump", Keys: "Space", Value: 0},
         {Name: "Time Tax -2:00", Enabled: true, Duration: 3, Weight: 5, Action: "Time Tax", Keys: "", Value: 120},
+        {Name: "Sliding Puzzle", Enabled: true, Duration: 1, Weight: 2, Action: "Sliding Puzzle", Keys: "", Value: 0, Grid: "3x3", Vary: false},
         {Name: "Jumpscare", Enabled: true, Duration: 1, Weight: 2, Action: "Jumpscare", Keys: "", Value: 0},
         {Name: "Send Chat", Enabled: true, Duration: 3, Weight: 5, Action: "Send Chat", Keys: "Enter", Value: 0},
         {Name: "Return to Orbit", Enabled: true, Duration: 5, Weight: 5, Action: "Return to Orbit", Keys: "Tab;o", Value: 0},
@@ -122,7 +123,7 @@ DefaultPunishments() {
 }
 
 ActionNames() {
-    return ["Jumpscare", "Movement Jam", "Spam Crouch", "Spam Jump", "Exit Desktop", "Random Shoot", "Cycle Keys", "Look Down + Shoot", "Spin 360", "Inventory Spam", "Use Super", "Time Tax", "Send Chat", "Return to Orbit", "Lights Out", "Tunnel Vision", "Screen Shuffle", "Invert Screen", "Drunk Vision", "Random Loadout", "Recorded Sequence", "Custom Sequence", "Spam Key", "Chat Control", "Turn Keyboard Off", "Alt+Enter", "Wide View", "Change Mouse Sensitivity"]
+    return ["Sliding Puzzle", "Jumpscare", "Movement Jam", "Spam Crouch", "Spam Jump", "Exit Desktop", "Random Shoot", "Cycle Keys", "Look Down + Shoot", "Spin 360", "Inventory Spam", "Use Super", "Time Tax", "Send Chat", "Return to Orbit", "Lights Out", "Tunnel Vision", "Screen Shuffle", "Invert Screen", "Drunk Vision", "Random Loadout", "Recorded Sequence", "Custom Sequence", "Spam Key", "Chat Control", "Turn Keyboard Off", "Alt+Enter", "Wide View", "Change Mouse Sensitivity"]
 }
 
 LoadAndMigratePunishments() {
@@ -175,7 +176,7 @@ LoadAndMigratePunishments() {
         value := IniRead(path, section, "Value", "0")
         if legacyTiming && action = "Alt+Enter" && name = "Alt+Enter" && IsNumber(duration) && Float(duration) = 3 && IsNumber(value) && Float(value) = 0
             duration := 5
-        p := {Name: name, Enabled: IniRead(path, section, "Enabled", "1") = "1", Duration: IsNumber(duration) ? Max(0.1, Min(300, Float(duration))) : 3, Weight: IsNumber(weight) ? Max(0, Min(100, Float(weight))) : 5, Action: action, Keys: keys, Value: IsNumber(value) ? Float(value) : 0, Vary: IniRead(path, section, "Vary", action = "Change Mouse Sensitivity" ? "1" : "0") = "1", Grid: PunishmentGrid(IniRead(path, section, "Grid", "2x3"))}
+        p := {Name: name, Enabled: IniRead(path, section, "Enabled", "1") = "1", Duration: IsNumber(duration) ? Max(0.1, Min(300, Float(duration))) : 3, Weight: IsNumber(weight) ? Max(0, Min(100, Float(weight))) : 5, Action: action, Keys: keys, Value: IsNumber(value) ? Float(value) : 0, Vary: IniRead(path, section, "Vary", action = "Change Mouse Sensitivity" ? "1" : "0") = "1", Grid: action = "Sliding Puzzle" ? SlidingPuzzleGrid(IniRead(path, section, "Grid", "3x3")) : PunishmentGrid(IniRead(path, section, "Grid", "2x3"))}
         result.Push(p)
         exists[action] := true
     }
@@ -239,6 +240,13 @@ LoadAndMigratePunishments() {
                     result.Push(p.Clone())
         needsSave := true
     }
+    if IniRead(path, "Meta", "Feature612", "0") != "1" {
+        if !exists.Has("Sliding Puzzle") && result.Length < 200
+            for p in defaults
+                if p.Action = "Sliding Puzzle"
+                    result.Push(p.Clone())
+        needsSave := true
+    }
     if needsSave {
         try SavePunishmentList(result)
         catch as err
@@ -284,6 +292,7 @@ SavePunishmentList(list, profile := "") {
         IniWrite("1", staged, "Meta", "Feature600")
         IniWrite("1", staged, "Meta", "Feature603")
         IniWrite("1", staged, "Meta", "Feature610")
+        IniWrite("1", staged, "Meta", "Feature612")
         CommitIniFile(staged, path)
         return true
     } finally {
@@ -392,6 +401,7 @@ OpenSettings(*) {
     b.OnEvent("Click", OpenInputLog)
     tab.UseTab(2)
     BuildActivitySettings(SettingsGui)
+    global ScareLocalVolume, ScareStreamVolume, ScareLocalSlider, ScareStreamSlider, ScareLocalLabel, ScareStreamLabel
     tab.UseTab(3)
     SettingsGui.SetFont("s11 Bold cF1E7F8", "Segoe UI")
     SettingsGui.AddText("x40 y126 w550 h25", "WHEEL")
@@ -412,30 +422,36 @@ OpenSettings(*) {
     SettingsGui.AddText("x40 y287 w155 h23", "General TTS")
     TtsVolumeLabel := SettingsGui.AddText("x548 y287 w57 h23 Right", TtsVolume "%")
     TtsSlider := SettingsGui.AddSlider("x635 y281 w143 h29 Range0-100 ToolTip", TtsVolume)
-    SpeakCheck := SettingsGui.AddCheckbox("x40 y312 w370 h25", "Voice announcement")
+    SpeakCheck := SettingsGui.AddCheckbox("x40 y306 w370 h25", "Voice announcement")
     SpeakCheck.Value := TtsEnabled
     SettingsGui.SetFont("s10 Bold cEDE4F8", "Segoe UI")
-    SettingsGui.AddText("x40 y350 w570 h23", "ACTIVITY")
+    SettingsGui.AddText("x40 y342 w570 h23", "ACTIVITY")
     SettingsGui.SetFont("s9 Norm cD6C9E7", "Segoe UI")
-    SettingsGui.AddText("x40 y383 w98 h22", "Spin tick")
-    SlotTickPathEdit := SettingsGui.AddEdit("x144 y377 w395 h29 Background241B30 cFFFFFF", SlotTickSoundPath)
-    b := SettingsGui.AddButton("x545 y377 w72 h29", "Browse")
+    SettingsGui.AddText("x40 y370 w98 h22", "Spin tick")
+    SlotTickPathEdit := SettingsGui.AddEdit("x144 y364 w395 h29 Background241B30 cFFFFFF", SlotTickSoundPath)
+    b := SettingsGui.AddButton("x545 y364 w72 h29", "Browse")
     b.OnEvent("Click", (*) => PickSound("slottick"))
-    SlotTickSlider := SettingsGui.AddSlider("x635 y377 w143 h29 Range0-100 ToolTip", SlotTickVolume)
-    SettingsGui.AddText("x40 y425 w98 h22", "Landing")
-    SlotLandPathEdit := SettingsGui.AddEdit("x144 y417 w395 h29 Background241B30 cFFFFFF", SlotLandSoundPath)
-    b := SettingsGui.AddButton("x545 y417 w72 h29", "Browse")
+    SlotTickSlider := SettingsGui.AddSlider("x635 y364 w143 h29 Range0-100 ToolTip", SlotTickVolume)
+    SettingsGui.AddText("x40 y406 w98 h22", "Landing")
+    SlotLandPathEdit := SettingsGui.AddEdit("x144 y400 w395 h29 Background241B30 cFFFFFF", SlotLandSoundPath)
+    b := SettingsGui.AddButton("x545 y400 w72 h29", "Browse")
     b.OnEvent("Click", (*) => PickSound("slotland"))
-    SlotLandSlider := SettingsGui.AddSlider("x635 y417 w143 h29 Range0-100 ToolTip", SlotLandVolume)
+    SlotLandSlider := SettingsGui.AddSlider("x635 y400 w143 h29 Range0-100 ToolTip", SlotLandVolume)
     SettingsGui.SetFont("s10 Bold cEDE4F8", "Segoe UI")
-    SettingsGui.AddText("x40 y465 w550 h23", "SEQUENCE")
+    SettingsGui.AddText("x40 y448 w550 h23", "SEQUENCE")
     SettingsGui.SetFont("s9 Norm cD6C9E7", "Segoe UI")
-    SettingsGui.AddText("x40 y503 w230 h24", "Sequence volume")
-    SequenceVolumeLabel := SettingsGui.AddText("x548 y503 w57 h24 Right", SequenceVolume "%")
-    SequenceSlider := SettingsGui.AddSlider("x635 y497 w143 h29 Range0-100 ToolTip", SequenceVolume)
-    for slider in [AnnouncementSlider, TtsSlider, SequenceSlider]
+    SettingsGui.AddText("x40 y478 w230 h24", "Sequence volume")
+    SequenceVolumeLabel := SettingsGui.AddText("x548 y478 w57 h24 Right", SequenceVolume "%")
+    SequenceSlider := SettingsGui.AddSlider("x635 y472 w143 h29 Range0-100 ToolTip", SequenceVolume)
+    SettingsGui.AddText("x40 y517 w230 h23", "Jumpscares · Meso")
+    ScareLocalLabel := SettingsGui.AddText("x548 y517 w57 h23 Right", ScareLocalVolume "%")
+    ScareLocalSlider := SettingsGui.AddSlider("x635 y511 w143 h29 Range0-100 ToolTip", ScareLocalVolume)
+    SettingsGui.AddText("x40 y554 w230 h23", "Jumpscares · Output")
+    ScareStreamLabel := SettingsGui.AddText("x548 y554 w57 h23 Right", ScareStreamVolume "%")
+    ScareStreamSlider := SettingsGui.AddSlider("x635 y548 w143 h29 Range0-100 ToolTip", ScareStreamVolume)
+    for slider in [AnnouncementSlider, TtsSlider, SequenceSlider, ScareLocalSlider, ScareStreamSlider]
         slider.OnEvent("Change", UpdateAudioLabels)
-    b := SettingsGui.AddButton("x543 y554 w236 h36", "Save audio")
+    b := SettingsGui.AddButton("x543 y589 w236 h36", "Save audio")
     b.OnEvent("Click", SaveAudioClick)
     tab.UseTab(4)
     SettingsGui.SetFont("s11 Bold cF1E7F8", "Segoe UI")
@@ -486,6 +502,9 @@ OpenSettings(*) {
 
 UpdateAudioLabels(*) {
     global SequenceSlider, TtsSlider, SequenceVolumeLabel, TtsVolumeLabel, AnnouncementSlider, AnnouncementLabel
+    global ScareLocalSlider, ScareStreamSlider, ScareLocalLabel, ScareStreamLabel
+    ScareLocalLabel.Text := ScareLocalSlider.Value "%"
+    ScareStreamLabel.Text := ScareStreamSlider.Value "%"
     SequenceVolumeLabel.Text := SequenceSlider.Value "%"
     TtsVolumeLabel.Text := TtsSlider.Value "%"
     AnnouncementLabel.Text := AnnouncementSlider.Value "%"
@@ -607,7 +626,9 @@ EditorRowSelected(control, index, selected) {
     EditorVary.Value := PunishmentVaries(p)
     grid := p.HasOwnProp("Grid") ? p.Grid : "2x3"
     EditorGrid.Choose(1)
-    for i, size in PunishmentGridChoices()
+    EditorGrid.Delete()
+    EditorGrid.Add(p.Action = "Sliding Puzzle" ? ["3x3", "4x4"] : PunishmentGridChoices())
+    for i, size in (p.Action = "Sliding Puzzle" ? ["3x3", "4x4"] : PunishmentGridChoices())
         if size = grid
             EditorGrid.Choose(i)
     UpdateEditorHint()
@@ -621,10 +642,10 @@ UpdateEditorHint(*) {
     global EditorRawKeys
     shared := SharedKeysForAction(action, KeyTokens(EditorRawKeys))
     hasKeys := shared.Length || InStr("|Spam Key|Exit Desktop|Return to Orbit|Send Chat|Custom Sequence|Recorded Sequence|", "|" action "|")
-    valueLabels := Map("Spam Crouch", "Pulse ms", "Exit Desktop", "Delay ms", "Spin 360", "Step", "Lights Out", "Darkness", "Tunnel Vision", "Zoom", "Wide View", "Scale", "Screen Shuffle", "Grid", "Random Loadout", "Slots", "Change Mouse Sensitivity", "Multiplier", "Alt+Enter", "Gap (sec)", "Drunk Vision", "Sway")
-    variable := InStr("|Lights Out|Tunnel Vision|Wide View|Screen Shuffle|Change Mouse Sensitivity|", "|" action "|") > 0
+    valueLabels := Map("Spam Crouch", "Pulse ms", "Exit Desktop", "Delay ms", "Spin 360", "Step", "Lights Out", "Darkness", "Tunnel Vision", "Zoom", "Wide View", "Scale", "Screen Shuffle", "Grid", "Sliding Puzzle", "Grid", "Random Loadout", "Slots", "Change Mouse Sensitivity", "Multiplier", "Alt+Enter", "Gap (sec)", "Drunk Vision", "Sway")
+    variable := InStr("|Lights Out|Tunnel Vision|Wide View|Screen Shuffle|Sliding Puzzle|Change Mouse Sensitivity|", "|" action "|") > 0
     EditorVary.Visible := variable
-    EditorVary.Text := action = "Screen Shuffle" || action = "Change Mouse Sensitivity" ? "Random" : "Progressive"
+    EditorVary.Text := action = "Screen Shuffle" || action = "Sliding Puzzle" || action = "Change Mouse Sensitivity" ? "Random" : "Progressive"
     EditorKeyLabel.Visible := hasKeys
     EditorKeys.Visible := hasKeys
     EditorKeys.Enabled := !shared.Length
@@ -636,9 +657,15 @@ UpdateEditorHint(*) {
     EditorChatTest.Picker.Visible := action = "Send Chat"
     EditorValueLabel.Visible := valueLabels.Has(action)
     EditorValueLabel.Text := valueLabels.Get(action, "Value")
-    EditorGrid.Visible := action = "Screen Shuffle"
+    EditorGrid.Visible := action = "Screen Shuffle" || action = "Sliding Puzzle"
+    choices := action = "Sliding Puzzle" ? ["3x3", "4x4"] : PunishmentGridChoices()
+    if EditorGrid.Visible && EditorGrid.Text != "" && !(action = "Sliding Puzzle" ? RegExMatch(EditorGrid.Text, "^[34]x[34]$") : RegExMatch(EditorGrid.Text, "^[2-5]x[2-6]$")) {
+        EditorGrid.Delete()
+        EditorGrid.Add(choices)
+        EditorGrid.Choose(1)
+    }
     EditorGrid.Enabled := !EditorVary.Value
-    EditorValue.Visible := valueLabels.Has(action) && action != "Screen Shuffle"
+    EditorValue.Visible := valueLabels.Has(action) && action != "Screen Shuffle" && action != "Sliding Puzzle"
     EditorValue.Enabled := !variable || !EditorVary.Value
     limits := PunishmentValueRange(action)
     EditorRange.Visible := IsObject(limits) && EditorValue.Enabled
@@ -700,7 +727,7 @@ EditorSave(*) {
     }
     savedKeys := SharedKeysForAction(action).Length ? EditorRawKeys : Trim(EditorKeys.Value)
     original := Punishments[i]
-    Punishments[i] := {Name: SubStr(Trim(EditorName.Value), 1, 80), Enabled: EditorEnabled.Value = 1, Duration: d, Weight: w, Action: action, Keys: savedKeys, Value: value, Vary: EditorVary.Visible && EditorVary.Value, Grid: PunishmentGrid(EditorGrid.Text)}
+    Punishments[i] := {Name: SubStr(Trim(EditorName.Value), 1, 80), Enabled: EditorEnabled.Value = 1, Duration: d, Weight: w, Action: action, Keys: savedKeys, Value: value, Vary: EditorVary.Visible && EditorVary.Value, Grid: action = "Sliding Puzzle" ? SlidingPuzzleGrid(EditorGrid.Text) : PunishmentGrid(EditorGrid.Text)}
     if !SavePunishments() {
         Punishments[i] := original
         return false
@@ -796,6 +823,9 @@ SaveSoundSettings(notify := true) {
     global SlotTickSoundPath, SlotLandSoundPath, SlotTickVolume, SlotLandVolume, SlotTickPathEdit, SlotLandPathEdit, SlotTickSlider, SlotLandSlider
     TickSoundPath := Trim(TickPathEdit.Value)
     LandSoundPath := Trim(LandPathEdit.Value)
+    global ScareLocalVolume, ScareStreamVolume, ScareLocalSlider, ScareStreamSlider
+    ScareLocalVolume := ScareLocalSlider.Value
+    ScareStreamVolume := ScareStreamSlider.Value
     TickVolume := TickSlider.Value
     LandVolume := LandSlider.Value
     SlotTickSoundPath := Trim(SlotTickPathEdit.Value)

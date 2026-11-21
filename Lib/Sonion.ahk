@@ -9,6 +9,7 @@ ScheduleSonion(target, now, stage := 0, transcript := 0) {
             return
         StopSonion()
     }
+    CancelSequenceAltEnter()
     preview := IsObject(stage)
     OpenStreamOutput(false)
     Sonion := {Target: target, Phase: "cue", Next: now + (preview ? 1200 : 10000), Step: 0,
@@ -161,12 +162,14 @@ ShowSonionPhone(call, now) {
         call.Dim.Show("NA x" b.X " y" b.Y " w" b.W " h" b.H)
         WinSetTransparent(240, "ahk_id " call.Dim.Hwnd)
     }
+    firstPhone := call.Phones.Length = 0
     index := call.Phones.Length + 1
     position := SonionPhonePlacement(b, call.Phones)
     phone := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000000 -DPIScale", "Sonion")
     state := {Gui: phone, Sound: "", Index: index, X: position.X, Y: position.Y, Page: position.Page, RegionApplied: false}
     call.Phones.Push(state)
     call.Panel := phone
+    UpdateInteractionPointer(call, firstPhone)
     phone.BackColor := "AC7ACA"
     phone.AddText("x5 y4 w296 h498 Background21162E", "")
     phone.AddText("x12 y12 w282 h482 Background2E1D50", "")
@@ -291,8 +294,9 @@ ShakeSonionPhone(call, now) {
                 call.PhoneClip := clip, call.PhoneScreen := screen
         }
     }
+    UpdateInteractionPointer(call)
     LayoutSonionPhones(call, now)
-    call.Next := now + 38
+    call.Next := now + 16
 }
 
 AnswerSonion(answer, *) {
@@ -416,6 +420,7 @@ CompatibleActivePick(candidate, effects) {
 }
 
 CloseSonionWindows(call) {
+    CloseInteractionPointer(call)
     for phone in call.Phones {
         StopSpecialSound(phone.Sound)
         if GuiHwndSafe(phone.Gui)

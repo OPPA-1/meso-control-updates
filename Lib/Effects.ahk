@@ -414,6 +414,10 @@ TryActivateEffect(now) {
         return false
     }
     p := Effect.P
+    if p.Action = "Alt+Enter" && SequenceBusy(now) {
+        Effect.Note := "Waiting for sequence"
+        return false
+    }
     for other in ActiveEffects {
         if other != Effect && other.Phase = "running" && EffectsConflict(other.P.Action, p.Action) {
             Effect.Note := "Waiting for " other.P.Name
@@ -473,6 +477,12 @@ TryActivateEffect(now) {
             Effect.Note := "Loadout Roulette | Input block unavailable"
             LogEvent("Loadout Roulette will run without input blocking")
         }
+    } else if p.Action = "Sliding Puzzle" {
+        try StartSlidingPuzzle(Effect, now)
+        catch as err {
+            BlockEffect(err.Message, now)
+            return false
+        }
     } else if p.Action = "Alt+Enter" {
         plan := AltEnterPlan(Effect.Duration, Round(FixedPunishmentValue(p) * 1000))
         Effect.AltEnterCount := 0
@@ -503,6 +513,10 @@ AdvanceOneEffect(now) {
     if Effect.Phase = "waiting" {
         if !TryActivateEffect(now)
             return
+    }
+    if Effect.P.Action = "Sliding Puzzle" && !Effect.Preview && Effect.Phase = "running" {
+        AdvanceSlidingPuzzle(Effect, now)
+        return
     }
     ReleaseDueKeys(now)
     CheckVisualWorker(now)
@@ -808,6 +822,7 @@ FinishEffect(reason := "") {
             GameKeyOwners.Delete(key)
     }
     try RestoreEffectClipboard(Effect)
+    try StopSlidingPuzzle(Effect)
     try StopSensitivityWorker(Effect)
     try EndGameplayInputLock(Effect)
     if Effect.VisualFile != "" {
@@ -850,6 +865,8 @@ IsVisualEffect(action) {
 }
 
 EffectsConflict(a, b) {
+    if a = "Sliding Puzzle" || b = "Sliding Puzzle"
+        return true
     if a = b
         return a = "Chat Control" || a = "Random Loadout" || a = "Wide View" || a = "Change Mouse Sensitivity" || a = "Alt+Enter" || a = "Send Chat"
     return (a = "Alt+Enter" || a = "Random Loadout") && b = "Send Chat"

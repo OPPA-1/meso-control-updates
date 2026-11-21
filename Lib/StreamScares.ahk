@@ -10,6 +10,8 @@ SyncSpecialSounds(now) {
         wanted[event.Id] := true
         if OutputSpecialSounds.Has(event.Id) {
             playing := OutputSpecialSounds[event.Id]
+            if event.Name = "321.wav" || event.Name = "scare1" || event.Name = "scare2"
+                Mci("setaudio " playing " volume to " ScareVolume(true)*10)
             if event.Repeat && MciStatus(playing, "mode") = "stopped"
                 Mci("play " playing " from 0")
             continue
@@ -20,7 +22,8 @@ SyncSpecialSounds(now) {
             path := SpecialAudioPath(event.Name)
             if Mci("open " Chr(34) path Chr(34) " alias " alias)
                 throw Error("Could not open " event.Name)
-            Mci("setaudio " alias " volume to 1000")
+            volume := event.Name = "321.wav" || event.Name = "scare1" || event.Name = "scare2" ? ScareVolume(true)*10 : 1000
+            Mci("setaudio " alias " volume to " volume)
             status := Mci("play " alias " from 0" (event.Repeat ? " repeat" : ""))
             if status && event.Repeat
                 status := Mci("play " alias " from 0")

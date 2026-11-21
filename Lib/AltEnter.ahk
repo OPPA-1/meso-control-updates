@@ -47,3 +47,27 @@ AdvanceAltEnterRestores() {
             PendingAltEnterRestores.Delete(target)
     }
 }
+
+SequenceBusy(now := 0) {
+    global Sonion, HorrorEvents, ScareQueue, ActiveScare
+    if !now
+        now := NowMs()
+    if IsSet(Sonion) && IsObject(Sonion)
+        return true
+    if IsSet(ScareQueue) && ScareQueue.Length || IsSet(ActiveScare) && IsObject(ActiveScare)
+        return true
+    if IsSet(HorrorEvents)
+        for event in HorrorEvents
+            if now < event.Due + 100000
+                return true
+    return false
+}
+
+CancelSequenceAltEnter() {
+    global ActiveEffects
+    if !IsSet(ActiveEffects)
+        return
+    for item in ActiveEffects.Clone()
+        if item.P.Action = "Alt+Enter"
+            WithEffect(item, FinishEffect, "Sequence starting")
+}

@@ -75,12 +75,18 @@ AdvanceScares(now) {
 
 StartScareVisual(name, target, now) {
     def := ScareDefinition(name)
-    WinGetClientPos(&x, &y, &w, &h, "ahk_id " target)
+    monitor := DllCall("user32\MonitorFromWindow", "Ptr", target, "UInt", 2, "Ptr")
+    info := Buffer(40, 0)
+    NumPut("UInt", 40, info)
+    if !DllCall("user32\GetMonitorInfoW", "Ptr", monitor, "Ptr", info)
+        throw Error("Could not find the game monitor")
+    x := NumGet(info, 4, "Int"), y := NumGet(info, 8, "Int")
+    w := NumGet(info, 12, "Int") - x, h := NumGet(info, 16, "Int") - y
     state := {Name: name, Target: target, Start: now, End: now + def.Duration, Definition: def,
         Token: 0, Image: 0, Surface: 0, Gui: 0, Sound: "", X: x, Y: y, W: w, H: h}
     try {
         state.Token := GdipStart()
-        source := SonionUiAsset(name = "jeff" ? "sonion_jeff.png" : name ".png")
+        source := SonionUiAsset(name = "jeff" ? "sonion_jeff.png" : name = "scare2" ? "omni.png" : "scare1.png")
         pic := 0
         if DllCall("gdiplus\GdipLoadImageFromFile", "WStr", source, "Ptr*", &pic) || !pic
             throw Error("Jumpscare image could not load")
@@ -89,6 +95,7 @@ StartScareVisual(name, target, now) {
         state.Gui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08080020 -DPIScale", "Meso Jumpscare")
         DrawScareVisual(state, now)
         state.Gui.Show("NA x" x " y" y " w" w " h" h)
+        PlayLocalScare(name = "jeff" ? "321.wav" : name, def.Duration)
         state.Sound := SpecialSound(name = "jeff" ? "321.wav" : name, false, def.Duration, false)
         return state
     } catch as err {
@@ -136,6 +143,7 @@ CancelScares() {
     global ScareQueue, ActiveScare
     EnsureScareState()
     ScareQueue := []
+    StopLocalScares()
     StopScareVisual(ActiveScare)
     ActiveScare := 0
 }

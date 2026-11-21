@@ -20,6 +20,11 @@
 #Include ..\Lib\HorrorFlash.ahk
 #Include ..\Lib\GameplayInput.ahk
 #Include ..\Lib\Sensitivity.ahk
+#Include ..\Lib\SlidingPuzzle.ahk
+#Include ..\Lib\PuzzleModel.ahk
+#Include ..\Lib\InteractionPointer.ahk
+#Include ..\Lib\ScareLocalAudio.ahk
+#Include ..\Lib\EffectLabels.ahk
 #Include ..\Lib\MacroCodec.ahk
 #Include ..\Lib\Recorder.ahk
 #Include ..\Lib\Editor.ahk
@@ -118,6 +123,7 @@ try {
     TestSendChatPicker()
     TestScareQueue610()
     TestFeature611()
+    TestFeature612()
     Check(DirectArguments(5, 'C:\Meso Control\Meso_Wheel_Trigger.vbs') = '//B //NoLogo "C:\Meso Control\Meso_Wheel_Trigger.vbs" --direct 5 %userName%', "Copied Streamer.bot arguments preserve the quoted path")
     state := Line("meta", 1, 1, 2000) Line("status", 0, 0, 0) Line("wheel", "idle", "", 0, 0, "", 0, 0)
     state .= Line("slots", "idle", "", 0, 0, 0, 0, 0, "", "", "", "") Line("timer", "idle", 0, 0, 0)
@@ -339,7 +345,7 @@ TestScareQueue610() {
     SpecialAudioState(NowMs() + 2)
     Check(!SpecialSounds.Has(id), "A finished scare cannot keep playing audio")
     for name in ["scare1", "scare2"] {
-        Check(FileExist(SpecialAudioPath(name)) && ScareDefinition(name).Duration < 1000, "Faster scare visuals have corresponding packaged audio")
+        Check(FileExist(SpecialAudioPath(name)) && ScareDefinition(name).Duration <= 1000, "Faster scare visuals have corresponding packaged audio")
     }
 }
 
@@ -601,4 +607,76 @@ Mci(command) {
 
 MciStatus(alias, field) {
     return "playing"
+}
+
+TestFeature612() {
+    global RuntimeDir, ConfigFile, HorrorEvents, Sonion, ScareQueue, ActiveScare
+    Check(SlidingPuzzleGrid("bad")="3x3" && SlidingPuzzleGrid("4x4")="4x4", "Puzzle defaults to fixed 3x3")
+    for n in [3,4] {
+        loop 30 {
+            board := PuzzleShuffle(n), seen := Map(), inversions := 0, blank := 0
+            for i,tile in board {
+                seen[tile] := true
+                if !tile
+                    blank := i
+                if tile
+                    for j,other in board
+                        if j>i && other && tile>other
+                            inversions++
+            }
+            Check(seen.Count=n*n && seen.Has(0) && !PuzzleSolved(board), "Puzzle has every tile and one gap")
+            solvable := Mod(n,2) ? !Mod(inversions,2) : Mod(inversions+n-(blank-1)//n,2)=1
+            Check(solvable, "Every 3x3 and 4x4 layout is solvable")
+            for neighbor in PuzzleNeighbors(blank,n)
+                Check(PuzzleAdjacent(blank,neighbor,n), "Puzzle moves only adjacent tiles")
+        }
+    }
+    Check(!PuzzleAdjacent(3,4,3) && !PuzzleAdjacent(4,5,4), "Puzzle cannot wrap across rows")
+    Check(PuzzleSolved([1,2,3,4,5,6,7,8,0]), "Solved puzzle is recognized")
+    Check(!SensitivityStatusFields("").Length && !SensitivityStatusFields("ready|1").Length && !SensitivityStatusFields("ready|x|2").Length, "Empty and partial sensitivity status is safe")
+    path := RuntimeDir "\pending-raw.state"
+    item := {Phase:"running", SensitivityPid:ProcessExist(), SensitivityFile:path, SensitivityCheck:0, SensitivityReady:false, SensitivityStartup:NowMs()+8000, End:NowMs()+8000, Sensitivity:3.0}
+    loop 5 {
+        item.SensitivityCheck := 0
+        WriteAtomic(path,"")
+        CheckSensitivityWorker(item,NowMs())
+        Check(!item.SensitivityReady,"Sensitivity tolerates empty status while its worker starts")
+    }
+    start := NowMs()
+    WriteAtomic(path,"ready|" start "|" (start+1000))
+    item.SensitivityCheck := 0
+    CheckSensitivityWorker(item,start)
+    Check(item.SensitivityReady && item.End=start+1000 && InStr(item.Note,"High"),"Sensitivity starts only after worker acknowledgement")
+    WriteAtomic(path,"restored")
+    item.SensitivityCheck := 0
+    CheckSensitivityWorker(item,start+100)
+    Check(item.End=start+100,"Restoration ends the sensitivity effect")
+    Check(ScareDefinition("scare1").Fps=50/3 && ScareDefinition("scare1").Duration=840,"FNAF 1 uses its original frame rate and duration")
+    Check(ScareDefinition("scare2").Frames=1 && FileExist(A_ScriptDir "\..\Ui\omni.png"),"Omni replaces the second visual with its linked audio slot")
+    Check(!FileExist(A_ScriptDir "\..\Ui\scare2.png"),"FNAF 2 visual is removed")
+    IniWrite(26,ConfigFile,"Audio","ScareVolume")
+    IniWrite(82,ConfigFile,"Audio","ScareOutputVolume")
+    Check(ScareVolume()=26 && ScareVolume(true)=82,"Local and output audio sliders are independent")
+    IniWrite(0,ConfigFile,"Audio","ScareVolume")
+    Check(ScareVolume()=0 && ScareVolume(true)=82,"Local mute preserves output audio")
+    Check(CompactEffectNote("Waiting for Destiny 2 - click back into the game")="Focus game","Waiting overlay has a short status")
+    savedSonion := Sonion, savedHorror := HorrorEvents, savedQueue := ScareQueue, savedScare := ActiveScare
+    try {
+        Sonion := 0, HorrorEvents := [], ScareQueue := [], ActiveScare := 0
+        Check(!SequenceBusy(1000),"Alt Enter is eligible without a sequence")
+        HorrorEvents := [{Due:50000}]
+        Check(SequenceBusy(1000),"Queued Tung excludes Alt Enter")
+        HorrorEvents := [], Sonion := {Phase:"ringing"}
+        Check(SequenceBusy(1000),"Sonion ringing excludes Alt Enter")
+        Sonion := {Phase:"accepted"}
+        Check(SequenceBusy(1000),"Delayed Jeff excludes Alt Enter")
+        Sonion := 0, ScareQueue := [{Due:50000}]
+        Check(SequenceBusy(1000),"Queued scares exclude Alt Enter")
+    } finally {
+        Sonion := savedSonion, HorrorEvents := savedHorror, ScareQueue := savedQueue, ActiveScare := savedScare
+    }
+    source := FileRead(A_ScriptDir "\..\Lib\Updates.ahk","UTF-8")
+    Check(InStr(source,'"ForceAuto", "1"') && InStr(source,"600000") && InStr(source,"SaveUpdateSession()"),"Auto updates default on with ten minute checks and session persistence")
+    source := FileRead(A_ScriptDir "\..\Lib\Sonion.ahk","UTF-8")
+    Check(InStr(source,"UpdateInteractionPointer(call, firstPhone)") && InStr(source,"CloseInteractionPointer(call)"),"Sonion owns a visible software pointer")
 }

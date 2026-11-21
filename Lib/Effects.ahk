@@ -1,5 +1,4 @@
-﻿#Include InputPacket.ahk
-
+﻿
 OrdinaryChatMessages() {
     return [
         "I suck at this game.",

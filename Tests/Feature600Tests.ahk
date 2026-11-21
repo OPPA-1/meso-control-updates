@@ -1,6 +1,9 @@
 ﻿#Requires AutoHotkey v2.0 64-bit
 #SingleInstance Off
 #Include ..\Lib\Core.ahk
+#Include ..\Lib\InputPacket.ahk
+#Include ..\Lib\InteractionGuard.ahk
+#Include ..\Lib\RecordedPlayback.ahk
 #Include ..\Lib\ActivityData.ahk
 #Include ..\Lib\ActivityOptions.ahk
 #Include ..\Lib\AltTab.ahk

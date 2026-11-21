@@ -21,6 +21,7 @@ for i, tile in Board
 PreviousClip := Buffer(16, 0)
 DllCall("user32\GetClipCursor", "Ptr", PreviousClip)
 OnExit(PuzzleCleanup)
+OnError(PuzzleFatal)
 try {
     DllCall("user32\SetThreadDpiAwarenessContext", "Ptr", -4, "Ptr")
     if !ProcessExist(ParentPid) || !WinActive("ahk_id " Target)
@@ -205,4 +206,12 @@ PuzzleCleanup(*) {
         DllCall("user32\ClipCursor", "Ptr", PreviousClip)
         try WinActivate("ahk_id " Target)
     }
+}
+
+PuzzleFatal(err, mode) {
+    global Finished
+    Finished := true
+    try PuzzleReport("error",err.Message)
+    try LogEvent("Sliding Puzzle: " err.Message " (" err.Line ")")
+    ExitApp(1)
 }

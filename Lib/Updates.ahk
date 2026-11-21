@@ -3,8 +3,10 @@
     DirCreate(A_ScriptDir "\.updates")
     repository := IniRead(ConfigFile, "Updates", "GitHubRepo", "OPPA-1/meso-control-updates")
     auto := IniRead(ConfigFile, "Updates", "ForceAuto", "1") = "1"
-    Updates := {Pid: 0, Operation: "", LastCheck: auto ? NowMs() - 600000 : NowMs(), AutoCheck: auto, Ready: FileExist(A_ScriptDir "\.updates\ready.json") != "", Requested: false, Applying: false, StartedAt: 0, Message: repository = "" ? "Repository not set" : "Ready", Version: "", Repository: repository}
+    Updates := {Pid: 0, Operation: "", LastCheck: auto ? NowMs() - 600000 : NowMs(), AutoCheck: auto, RetryAfter: 0, OutputPrepareAt: 0, Ready: FileExist(A_ScriptDir "\.updates\ready.json") != "", Requested: false, Applying: false, StartedAt: 0, Message: repository = "" ? "Repository not set" : "Ready", Version: "", Repository: repository}
     state := IniRead(A_ScriptDir "\.updates\status.ini", "Update", "State", "")
+    if state = "error"
+        Updates.RetryAfter := NowMs()+600000
     if state = "installed" || state = "repaired"
         Updates.Message := IniRead(A_ScriptDir "\.updates\status.ini", "Update", "Message", Updates.Message)
     if Updates.Ready
@@ -220,14 +222,18 @@ UpdatesTick(now) {
     global Updates, OutputPid, OutputEnabled, Queue, ConfigFile
     if !IsSet(Updates)
         return false
-    if Updates.AutoCheck && Updates.Ready
+    if Updates.AutoCheck && Updates.Ready && now >= Updates.RetryAfter
         Updates.Requested := true
     if !Updates.Pid && Updates.Requested && Updates.Ready && UpdateCanInstall(now) {
+        if !PrepareOutputForUpdate(now)
+            return false
         try {
             SaveAppSettings()
             SavePending()
             SaveUpdateSession()
         } catch as err {
+            ResumeOutputAfterFailedUpdate()
+            Updates.RetryAfter := now+600000
             Updates.Requested := false
             Updates.Message := "Cannot save session before updating: " err.Message
             return false
@@ -239,6 +245,9 @@ UpdatesTick(now) {
             ExitApp()
             return true
         }
+        ResumeOutputAfterFailedUpdate()
+        Updates.Requested := false
+        Updates.RetryAfter := now+600000
     }
     if !Updates.Pid && Updates.AutoCheck && !Updates.Ready && !Updates.Requested && Updates.Repository != "" && now - Updates.LastCheck >= 600000 {
         Updates.LastCheck := now
@@ -380,5 +389,41 @@ RestoreUpdateSession() {
         return false
     } finally {
         try FileDelete(path)
+    }
+}
+
+PrepareOutputForUpdate(now) {
+    global Updates, OutputPid, RuntimeDir
+    if !OutputPid || !ProcessExist(OutputPid)
+        return true
+    path := RuntimeDir "\output-update-ready.state"
+    if !Updates.OutputPrepareAt {
+        try FileDelete(path)
+        renderer := StreamOutputWindow(OutputPid)
+        if !renderer
+            return false
+        Updates.OutputPrepareAt := now
+        PostMessage(0x8005, ProcessExist(), 0,, "ahk_id " renderer)
+        return false
+    }
+    f := []
+    try f := Fields(Trim(FileRead(path,"UTF-8"),Chr(13) Chr(10)))
+    if f.Length=2 && f[1]=OutputPid && f[2]=ProcessExist()
+        return true
+    if now-Updates.OutputPrepareAt > 5000 {
+        ResumeOutputAfterFailedUpdate()
+        Updates.Requested := false
+        Updates.RetryAfter := now+600000
+        Updates.Message := "Output busy. Retrying the update in 10 minutes."
+    }
+    return false
+}
+ResumeOutputAfterFailedUpdate() {
+    global Updates, OutputPid
+    Updates.OutputPrepareAt := 0
+    if OutputPid && ProcessExist(OutputPid) {
+        renderer := StreamOutputWindow(OutputPid)
+        if renderer
+            try PostMessage(0x8006,0,0,, "ahk_id " renderer)
     }
 }

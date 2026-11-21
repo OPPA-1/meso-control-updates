@@ -50,6 +50,8 @@ WheelLabelLayouts := []
 WheelHub := BuildWheelHub()
 DrawBusy := false
 OutputClosing := false
+OutputUpdating := false
+OutputUpdateStarted := 0
 OutputStopRequested := false
 OutputCleanupDone := false
 TimerResolutionActive := false
@@ -106,6 +108,8 @@ OnMessage(0x232, SaveOutputPosition)
 OnMessage(0x8002, RequestOutputClose)
 OnMessage(0x8003, StopSpecialEffects)
 OnMessage(0x8004, (*) => Reload())
+OnMessage(0x8005, PauseRendererForUpdate)
+OnMessage(0x8006, ResumeRendererAfterUpdate)
 OnExit(OutputExit)
 mon := MonitorGetCount() >= 2 ? (MonitorGetPrimary() = 1 ? 2 : 1) : MonitorGetPrimary()
 MonitorGetWorkArea(mon, &ml, &mt, &mr, &mb)
@@ -922,7 +926,7 @@ UpdateRenderStats(now, elapsed, moving) {
 
 
 RunRenderLoop() {
-    global OutputClosing, OutputStopRequested, State
+    global OutputClosing, OutputStopRequested, State, OutputUpdating, OutputUpdateStarted
     nextFrame := PerfNowMs()
     lastAudioTick := 0
     lastHorrorTick := 0
@@ -931,6 +935,12 @@ RunRenderLoop() {
         if OutputClosing || OutputStopRequested
             break
         clockNow := NowMs()
+        if OutputUpdating {
+            if clockNow-OutputUpdateStarted > 45000
+                ResumeRendererAfterUpdate()
+            Sleep(15)
+            continue
+        }
         ReadState(clockNow)
         if clockNow - lastAudioTick >= 1000 {
             RefreshAudioSettings()
@@ -1335,4 +1345,23 @@ StopSpecialEffects(wParam := 0, lParam := 0, msg := 0, hwnd := 0) {
     CancelFigure()
     ClearScreenDamage()
     return 0
+}
+
+PauseRendererForUpdate(controller, *) {
+    global OutputUpdating, OutputUpdateStarted, AudioReady, RuntimeDir
+    OutputUpdating := true
+    OutputUpdateStarted := NowMs()
+    StopOutputSpecialSounds()
+    StopHorror()
+    CancelFigure()
+    ClearScreenDamage()
+    for alias in ["mesotick","mesoland","mesoslottick","mesoslotland","mesohorror","mesofigure"]
+        Mci("close " alias)
+    AudioReady := Map()
+    WriteAtomic(RuntimeDir "\output-update-ready.state", Line(ProcessExist(),controller))
+}
+ResumeRendererAfterUpdate(*) {
+    global OutputUpdating
+    OutputUpdating := false
+    RefreshAudioSettings(true)
 }

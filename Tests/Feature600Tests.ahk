@@ -380,7 +380,7 @@ TestSendChatPicker() {
 TestSequencePicker() {
     global Sonion, ActiveEffects, SequenceTestHorrorDue, SequenceTestOutputOpened, HorrorEvents, OutputPid
     global TickPathEdit, LandPathEdit, TickSlider, LandSlider, SlotTickPathEdit, SlotLandPathEdit, SlotTickSlider, SlotLandSlider
-    global SequenceSlider, TtsSlider, AnnouncementSlider, SpeakCheck, ViewerCheck
+    global SequenceSlider, TtsSlider, AnnouncementSlider, SpeakCheck, ViewerCheck, ScareLocalSlider, ScareStreamSlider
     settings := Gui(, "Meso sequence picker test")
     BuildSequenceSettings(settings)
     settings.Show("w824 h362")
@@ -388,6 +388,7 @@ TestSequencePicker() {
     try {
         TickPathEdit := LandPathEdit := SlotTickPathEdit := SlotLandPathEdit := {Value: ""}
         TickSlider := LandSlider := SlotTickSlider := SlotLandSlider := SequenceSlider := TtsSlider := AnnouncementSlider := {Value: 75}
+        ScareLocalSlider := ScareStreamSlider := {Value: 100}
         SpeakCheck := ViewerCheck := {Value: 0}
         SequenceTestHorrorDue := 0, SequenceTestOutputOpened := false
         HorrorEvents := [], OutputPid := 0

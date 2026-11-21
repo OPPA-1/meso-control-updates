@@ -325,12 +325,19 @@ SaveUpdateSession() {
     text := "[Session]" nl "SavedAt=" NowMs() nl "Paused=" (Queue.Paused ? 1 : 0) nl "Completed=" Queue.Completed nl "X=" x nl "Y=" y nl "Visible=" visible nl "Output=" (OutputEnabled ? 1 : 0) nl "Guides=" (Guides ? 1 : 0) nl
     text .= "[Clock]" nl "Phase=" Clock.Phase nl "Generation=" Clock.Generation nl
     text .= "[Slots]" nl "Phase=" Slots.Phase nl "Locked=" Slots.Locked nl "Id=" Slots.Id nl
+    for field in ["Reel","Mode","HoldUntil","Start"]
+        text .= field "=" (Slots.HasOwnProp(field) ? Slots.%field% : 0) nl
     for i, value in Slots.Values
         text .= "Value" i "=" value nl
     text .= "[VisualHits]" nl
     for action, count in VisualHits
         text .= action "=" count nl
     WriteAtomic(A_ScriptDir "\.updates\session.ini", text)
+    pools := ""
+    if Slots.HasOwnProp("Pools")
+        for i, pool in Slots.Pools
+            pools .= Line(i, pool*)
+    WriteAtomic(RuntimeDir "\update-slots.state", pools)
     seen := ""
     for id, tick in Queue.Seen
         seen .= Line(id, tick)
@@ -362,7 +369,23 @@ RestoreUpdateSession() {
         }
         Clock.Phase := IniRead(path, "Clock", "Phase", "idle") = "ready" ? "ready" : "idle"
         Clock.Generation := Integer(IniRead(path, "Clock", "Generation", "0"))
-        Slots.Phase := "idle"
+        phase := IniRead(path,"Slots","Phase","idle")
+        Slots.Phase := InStr("|idle|wait|hold|","|" phase "|") ? phase : "idle"
+        for field in ["Reel","Mode","HoldUntil","Start"]
+            Slots.%field% := IniRead(path,"Slots",field,"0")+0
+        Slots.Pools := []
+        try {
+            for row in StrSplit(FileRead(RuntimeDir "\update-slots.state","UTF-8"),Chr(10)) {
+                fields := Fields(row)
+                if fields.Length < 2 || !IsNumber(fields[1]) || fields[1] != Slots.Pools.Length+1 || Slots.Pools.Length>=4
+                    continue
+                pool := []
+                loop fields.Length-1
+                    pool.Push(fields[A_Index+1])
+                Slots.Pools.Push(pool)
+            }
+            FileDelete(RuntimeDir "\update-slots.state")
+        }
         Slots.Locked := Integer(IniRead(path, "Slots", "Locked", "0"))
         Slots.Id := IniRead(path, "Slots", "Id", "")
         loop 4

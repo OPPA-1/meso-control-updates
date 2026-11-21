@@ -19,13 +19,13 @@ PlayLocalScare(name, duration) {
         LogEvent("Local jumpscare audio could not open: " name)
         return
     }
-    LocalScareMci("setaudio " alias " volume to " ScareVolume()*10)
+    LocalScareMci("setaudio " alias " volume to " LocalScareLevel(name)*10)
     if LocalScareMci("play " alias " from 0") {
         LocalScareMci("close " alias)
         LogEvent("Local jumpscare audio could not play: " name)
         return
     }
-    LocalScareSounds[alias] := NowMs()+duration
+    LocalScareSounds[alias] := {Until:NowMs()+duration, Name:name}
 }
 AdvanceLocalScares(now) {
     global LocalScareSounds, RuntimeDir
@@ -40,12 +40,12 @@ AdvanceLocalScares(now) {
     }
     if !IsSet(LocalScareSounds)
         return
-    for alias, deadline in LocalScareSounds.Clone() {
-        if now >= deadline {
+    for alias, playing in LocalScareSounds.Clone() {
+        if now >= playing.Until {
             LocalScareMci("close " alias)
             LocalScareSounds.Delete(alias)
         } else
-            LocalScareMci("setaudio " alias " volume to " ScareVolume()*10)
+            LocalScareMci("setaudio " alias " volume to " LocalScareLevel(playing.Name)*10)
     }
 }
 StopLocalScares() {
@@ -55,4 +55,14 @@ StopLocalScares() {
     for alias in LocalScareSounds
         LocalScareMci("close " alias)
     LocalScareSounds := Map()
+}
+
+LocalScareLevel(name) {
+    global ConfigFile
+    level := ScareVolume()
+    if name="1.wav" || name="2.wav" {
+        sequence := IniRead(ConfigFile,"Audio","SequenceVolume",IniRead(ConfigFile,"Audio","HorrorVolume","75"))
+        level *= Min(100,Max(0,(IsNumber(sequence) ? sequence : 75)*1.5))/100
+    }
+    return Round(level)
 }

@@ -694,7 +694,7 @@ TestUpdateSession612() {
         Queue.Paused := false
         Queue.Completed := 7
         Queue.Seen["already-redeemed-612"] := NowMs()
-        Slots := {Phase:"idle",Locked:4,Id:"activity-612",Values:["RAID","LAST WISH","FULL CLEAR","TITAN"]}
+        Slots := {Phase:"wait",Locked:2,Reel:2,Mode:0,HoldUntil:0,Start:1000,Id:"activity-612",Values:["RAID","LAST WISH","FULL CLEAR","TITAN"],Pools:[["RAID","DUNGEON"],["LAST WISH","VOW"]]}
         Clock := ActivityClock()
         Clock.Phase := "ready", Clock.Generation := 11
         OutputEnabled := false, OutputPid := 0, Guides := true
@@ -706,7 +706,7 @@ TestUpdateSession612() {
         Check(RestoreUpdateSession(),"Update session restores successfully")
         Check(!Queue.Paused && Queue.Count()=1 && Queue.Completed=7,"Update keeps queue state and completed count")
         Check(Queue.Seen.Has("already-redeemed-612"),"Update preserves redemption deduplication")
-        Check(Clock.Phase="ready" && Clock.Generation=11 && Slots.Values[2]="LAST WISH" && Slots.Locked=4,"Update keeps activity results and ready timer")
+        Check(Clock.Phase="ready" && Clock.Generation=11 && Slots.Values[2]="LAST WISH" && Slots.Locked=2 && Slots.Phase="wait" && Slots.Pools[2][2]="VOW","Update keeps activity results and ready timer")
         Check(Guides && VisualHits["Lights Out"]=3 && VisualHits["Tunnel Vision"]=2,"Update keeps overlays and progressive strength")
         Check(!FileExist(A_ScriptDir "\.updates\session.ini"),"Update session is consumed once")
         SettingsGui := 0, Rounds := RoundCycle(), Recorder := {Phase:"idle"}, DirectPending := []

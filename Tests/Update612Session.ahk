@@ -1,6 +1,8 @@
 #Requires AutoHotkey v2.0 64-bit
 ; The validation job copies this harness beside Meso_Control.ahk.
 OnError((err, mode) => (FileAppend(err.Message " (" err.File ":" err.Line ")" Chr(10), A_ScriptDir "\session-test-error.txt"), ExitApp(1)))
+IniWrite(0,A_ScriptDir "\Meso_Chaos.ini","Updates","ForceAuto")
+FileAppend("Harness started" Chr(10),A_ScriptDir "\session-test-progress.txt")
 SetTimer(PrepareSessionTest612,-1000)
 #Include Meso_Control.ahk
 
@@ -10,6 +12,7 @@ PrepareSessionTest612() {
     try {
         Updates.AutoCheck := false
         WheelControllerEnabled := false
+        FileAppend("Opening Settings" Chr(10),A_ScriptDir "\session-test-progress.txt")
         OpenSettings()
         ScareLocalSlider.Value := 0
         ScareStreamSlider.Value := 82
@@ -31,6 +34,7 @@ PrepareSessionTest612() {
         EditorGrid.Choose(2)
         if EditorGrid.Text!="4x4"
             throw Error("Puzzle grid list must offer 4x4")
+        FileAppend("Settings verified" Chr(10),A_ScriptDir "\session-test-progress.txt")
         CloseSettings()
         Queue.Accept("pending-session-612",false,NowMs(),"meso",true,2)
         Queue.Paused := false
@@ -50,6 +54,7 @@ PrepareSessionTest612() {
         if !OutputPid || !StreamOutputWindow(OutputPid)
             throw Error("Stream output did not open")
         WriteAtomic(RuntimeDir "\session-test-original.state",Line(ProcessExist(),OutputPid))
+        FileAppend("Requesting quiet update" Chr(10),A_ScriptDir "\session-test-progress.txt")
         Updates.Requested := true
         WriteAtomic(RuntimeDir "\session-test-ready.state","ready")
     } catch as err {

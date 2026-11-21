@@ -158,7 +158,7 @@ jobs:
           & "$root/Lib/GitHubUpdateTools.ps1" -Operation StageLocal -Root $root -LocalZip $zip
           Copy-Item "$root/Tests/Update612Session.ahk" "$root/Meso_UpdateSession612_Test.ahk"
           $ahk = "$env:RUNNER_TEMP/ahk/AutoHotkey64.exe"
-          $job = Start-Process $ahk -ArgumentList @('/ErrorStdOut=UTF-8','"' + "$root/Meso_UpdateSession612_Test.ahk" + '"') -PassThru
+          $job = Start-Process $ahk -WorkingDirectory $root -RedirectStandardOutput "$root/session-test-stdout.txt" -RedirectStandardError "$root/session-test-stderr.txt" -ArgumentList @('/ErrorStdOut=UTF-8','"' + "$root/Meso_UpdateSession612_Test.ahk" + '"') -PassThru
           $deadline = (Get-Date).AddSeconds(40)
           $restored = $false
           try {
@@ -182,6 +182,8 @@ jobs:
               Start-Sleep -Milliseconds 150
             }
             if (!$restored) {
+              Get-Content "$root/session-test-progress.txt","$root/session-test-stdout.txt","$root/session-test-stderr.txt" -ErrorAction SilentlyContinue
+              Get-Content "$root/.updates/status.ini","$root/runtime/output.state","$root/runtime/controller.info" -ErrorAction SilentlyContinue
               Get-Content "$root/runtime/Meso.log" -Tail 50 -ErrorAction SilentlyContinue
               throw 'The automatic update did not restore the controller and stream output session'
             }

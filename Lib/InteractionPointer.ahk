@@ -32,7 +32,7 @@ UpdateInteractionPointer(owner, center := false) {
     NumPut("UChar", 255, "UChar", 1, blend, 2)
     DllCall("user32\UpdateLayeredWindow", "Ptr", p.Gui.Hwnd, "Ptr", 0, "Ptr", destination, "Ptr", size,
         "Ptr", p.Canvas.DC, "Ptr", origin, "UInt", 0, "Ptr", blend, "UInt", 2)
-    p.Gui.Show("NA")
+    p.Gui.Show("NA x" (x-31) " y" (y-27) " w72 h72")
 }
 CloseInteractionPointer(owner) {
     if !owner.HasOwnProp("Pointer")
@@ -42,6 +42,8 @@ CloseInteractionPointer(owner) {
         p.Gui.Destroy()
     if IsObject(p.Canvas)
         p.Canvas.Dispose()
-    GdipStop(&p.Token)
+    token := p.Token
+    GdipStop(&token)
+    p.Token := 0
     owner.DeleteProp("Pointer")
 }

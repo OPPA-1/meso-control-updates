@@ -190,7 +190,7 @@ jobs:
             }
             if (!$restored) {
               Get-Content "$root/session-test-progress.txt","$root/session-test-stdout.txt","$root/session-test-stderr.txt" -ErrorAction SilentlyContinue
-              Get-Content "$root/.updates/status.ini","$root/runtime/output.state","$root/runtime/controller.info" -ErrorAction SilentlyContinue
+              Get-Content "$root/.updates/status.ini","$root/runtime/output.state","$root/runtime/controller.info","$root/runtime/session-test-engine.state","$root/runtime/sequence-busy.state","$root/runtime/output-update-ready.state" -ErrorAction SilentlyContinue
               Get-Content "$root/runtime/Meso.log" -Tail 50 -ErrorAction SilentlyContinue
               throw 'The automatic update did not restore the controller and stream output session'
             }

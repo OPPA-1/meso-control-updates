@@ -171,7 +171,36 @@ jobs:
                   $info = @(Get-Content "$root/runtime/controller.info")
                   $state = Get-Content "$root/runtime/output.state" -Raw -ErrorAction SilentlyContinue
                   $health = Get-Content "$root/runtime/output-health.info" -Raw -ErrorAction SilentlyContinue
-                  if ($info.Count -ge 3 -and [int]$info[2] -ne [int]$original[0] -and $state -match '(?m)^status\|1\|0\|1\r?
+                  if ($info.Count -ge 3 -and [int]$info[2] -ne [int]$original[0] -and $state -match '(?m)^status\|1\|0\|1\r?$' -and $state -match '(?m)^timer\|ready\|' -and $state -match 'LAST WISH' -and $health -match '^\d+\|') {
+                    $renderer = [int]$health.Split('|')[0]
+                    if ($renderer -ne [int]$original[1] -and (Get-Process -Id $renderer -ErrorAction SilentlyContinue)) {
+                      $restored = $true
+                      break
+                    }
+                  }
+                }
+              }
+              Start-Sleep -Milliseconds 150
+            }
+            if (!$restored) {
+              Get-Content "$root/runtime/Meso.log" -Tail 50 -ErrorAction SilentlyContinue
+              throw 'The automatic update did not restore the controller and stream output session'
+            }
+            if (Test-Path "$root/.updates/session.ini") { throw 'Session restore receipt was not consumed' }
+            if ((Get-Content "$root/.updates/status.ini" -Raw) -notmatch 'State=installed') { throw 'Quiet update did not finish' }
+            Write-Host 'PASS real audio and puzzle settings, output pause, automatic relaunch, queue and activity preservation'
+          } finally {
+            if (Test-Path "$root/runtime/controller.info") {
+              $info = @(Get-Content "$root/runtime/controller.info")
+              if ($info.Count -ge 3) { Stop-Process -Id ([int]$info[2]) -Force -ErrorAction SilentlyContinue }
+            }
+            if (Test-Path "$root/runtime/output-health.info") {
+              $health = Get-Content "$root/runtime/output-health.info" -Raw
+              Stop-Process -Id ([int]$health.Split('|')[0]) -Force -ErrorAction SilentlyContinue
+            }
+            Stop-Process -Id $job.Id -Force -ErrorAction SilentlyContinue
+          }
+      - uses: actions/upload-artifact@v4
         with:
           name: Meso-Control-6.1.2-Windows
           path: ${{ runner.temp }}/meso/Releases/*

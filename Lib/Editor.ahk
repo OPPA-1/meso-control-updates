@@ -111,7 +111,7 @@ DefaultPunishments() {
         {Name: "Lights Out", Enabled: true, Duration: 8, Weight: 2, Action: "Lights Out", Keys: "", Value: 210},
         {Name: "Tunnel Vision", Enabled: true, Duration: 8, Weight: 2, Action: "Tunnel Vision", Keys: "", Value: 2},
         {Name: "Screen Shuffle", Enabled: true, Duration: 8, Weight: 2, Action: "Screen Shuffle", Keys: "", Value: 0},
-        {Name: "Invert Screen", Enabled: true, Duration: 8, Weight: 2, Action: "Invert Screen", Keys: "", Value: 0},
+        {Name: "Invert Screen", Enabled: true, Duration: 8, Weight: 2, Action: "Invert Screen", Keys: "", Value: 0, Vary: true, Flip: "Horizontal"},
         {Name: "Drunk Vision", Enabled: true, Duration: 8, Weight: 2, Action: "Drunk Vision", Keys: "", Value: 3},
         {Name: "Loadout Roulette", Enabled: true, Duration: 4, Weight: 4, Action: "Random Loadout", Keys: "", Value: 12},
         {Name: "Turn Keyboard Off", Enabled: true, Duration: 5, Weight: 4, Action: "Turn Keyboard Off", Keys: "", Value: 0},
@@ -176,7 +176,7 @@ LoadAndMigratePunishments() {
         value := IniRead(path, section, "Value", "0")
         if legacyTiming && action = "Alt+Enter" && name = "Alt+Enter" && IsNumber(duration) && Float(duration) = 3 && IsNumber(value) && Float(value) = 0
             duration := 5
-        p := {Name: name, Enabled: IniRead(path, section, "Enabled", "1") = "1", Duration: IsNumber(duration) ? Max(0.1, Min(300, Float(duration))) : 3, Weight: IsNumber(weight) ? Max(0, Min(100, Float(weight))) : 5, Action: action, Keys: keys, Value: IsNumber(value) ? Float(value) : 0, Vary: IniRead(path, section, "Vary", action = "Change Mouse Sensitivity" ? "1" : "0") = "1", Grid: action = "Sliding Puzzle" ? SlidingPuzzleGrid(IniRead(path, section, "Grid", "3x3")) : PunishmentGrid(IniRead(path, section, "Grid", "2x3"))}
+        p := {Name: name, Enabled: IniRead(path, section, "Enabled", "1") = "1", Duration: IsNumber(duration) ? Max(0.1, Min(300, Float(duration))) : 3, Weight: IsNumber(weight) ? Max(0, Min(100, Float(weight))) : 5, Action: action, Keys: keys, Value: IsNumber(value) ? Float(value) : 0, Vary: IniRead(path, section, action = "Invert Screen" ? "FlipRandom" : "Vary", action = "Change Mouse Sensitivity" || action = "Invert Screen" ? "1" : "0") = "1", Flip: FlipChoices()[FlipChoicesIndex(IniRead(path,section,"Flip","Horizontal"))], Grid: action = "Sliding Puzzle" ? SlidingPuzzleGrid(IniRead(path, section, "Grid", "3x3")) : PunishmentGrid(IniRead(path, section, "Grid", "2x3"))}
         result.Push(p)
         exists[action] := true
     }
@@ -279,6 +279,8 @@ SavePunishmentList(list, profile := "") {
             IniWrite(p.Keys, staged, sec, "Keys")
             IniWrite(p.Value, staged, sec, "Value")
             IniWrite(PunishmentVaries(p) ? 1 : 0, staged, sec, "Vary")
+            IniWrite(PunishmentVaries(p) ? 1 : 0, staged, sec, "FlipRandom")
+            IniWrite(p.HasOwnProp("Flip") ? p.Flip : "Horizontal", staged, sec, "Flip")
             IniWrite(p.HasOwnProp("Grid") ? p.Grid : "2x3", staged, sec, "Grid")
         }
         for p in list {
@@ -402,8 +404,8 @@ OpenSettings(*) {
     InputMethodDrop := SettingsGui.AddDropDownList("x144 y561 w240", ["Scan-code Event", "Scan-code Input"])
     InputMethodDrop.Choose(GameInputMethod = "Input" ? 2 : 1)
     InputMethodDrop.OnEvent("Change", SetGameInputMethod)
-    b := SettingsGui.AddButton("x401 y561 w125 h27", "Input log")
-    b.OnEvent("Click", OpenInputLog)
+    b := SettingsGui.AddButton("x499 y561 w27 h27", "⋯")
+    b.OnEvent("Click", OpenDiagnosticsMenu)
     tab.UseTab(2)
     BuildActivitySettings(SettingsGui)
     global ScareLocalVolume, ScareStreamVolume, ScareLocalSlider, ScareStreamSlider, ScareLocalLabel, ScareStreamLabel
@@ -630,11 +632,11 @@ EditorRowSelected(control, index, selected) {
     EditorKeys.Value := p.Keys
     EditorValue.Value := FixedPunishmentValue(p)
     EditorVary.Value := PunishmentVaries(p)
-    grid := p.HasOwnProp("Grid") ? p.Grid : "2x3"
+    grid := p.Action = "Invert Screen" ? (p.HasOwnProp("Flip") ? p.Flip : "Horizontal") : p.HasOwnProp("Grid") ? p.Grid : "2x3"
     EditorGrid.Choose(1)
     EditorGrid.Delete()
-    EditorGrid.Add(p.Action = "Sliding Puzzle" ? ["3x3", "4x4"] : PunishmentGridChoices())
-    for i, size in (p.Action = "Sliding Puzzle" ? ["3x3", "4x4"] : PunishmentGridChoices())
+    EditorGrid.Add(p.Action = "Invert Screen" ? FlipChoices() : p.Action = "Sliding Puzzle" ? ["3x3", "4x4"] : PunishmentGridChoices())
+    for i, size in (p.Action = "Invert Screen" ? FlipChoices() : p.Action = "Sliding Puzzle" ? ["3x3", "4x4"] : PunishmentGridChoices())
         if size = grid
             EditorGrid.Choose(i)
     UpdateEditorHint()
@@ -651,10 +653,10 @@ UpdateEditorHint(*) {
     global EditorRawKeys
     shared := SharedKeysForAction(action, KeyTokens(EditorRawKeys))
     hasKeys := shared.Length || InStr("|Spam Key|Exit Desktop|Return to Orbit|Send Chat|Custom Sequence|Recorded Sequence|", "|" action "|")
-    valueLabels := Map("Spam Crouch", "Pulse ms", "Exit Desktop", "Delay ms", "Spin 360", "Step", "Lights Out", "Darkness", "Tunnel Vision", "Zoom", "Wide View", "Scale", "Screen Shuffle", "Grid", "Sliding Puzzle", "Grid", "Random Loadout", "Slots", "Change Mouse Sensitivity", "Multiplier", "Alt+Enter", "Gap (sec)", "Drunk Vision", "Sway")
-    variable := InStr("|Lights Out|Tunnel Vision|Wide View|Screen Shuffle|Sliding Puzzle|Change Mouse Sensitivity|", "|" action "|") > 0
+    valueLabels := Map("Spam Crouch", "Pulse ms", "Exit Desktop", "Delay ms", "Spin 360", "Step", "Lights Out", "Darkness", "Tunnel Vision", "Zoom", "Wide View", "Scale", "Screen Shuffle", "Grid", "Invert Screen", "Flip", "Sliding Puzzle", "Grid", "Random Loadout", "Slots", "Change Mouse Sensitivity", "Multiplier", "Alt+Enter", "Gap (sec)", "Drunk Vision", "Sway")
+    variable := InStr("|Lights Out|Tunnel Vision|Wide View|Screen Shuffle|Sliding Puzzle|Invert Screen|Change Mouse Sensitivity|", "|" action "|") > 0
     EditorVary.Visible := variable
-    EditorVary.Text := action = "Screen Shuffle" || action = "Sliding Puzzle" || action = "Change Mouse Sensitivity" ? "Random" : "Progressive"
+    EditorVary.Text := action = "Invert Screen" || action = "Screen Shuffle" || action = "Sliding Puzzle" || action = "Change Mouse Sensitivity" ? "Random" : "Progressive"
     EditorKeyLabel.Visible := hasKeys
     EditorKeys.Visible := hasKeys
     EditorKeys.Enabled := !shared.Length
@@ -666,8 +668,8 @@ UpdateEditorHint(*) {
     EditorChatTest.Picker.Visible := action = "Send Chat"
     EditorValueLabel.Visible := valueLabels.Has(action)
     EditorValueLabel.Text := valueLabels.Get(action, "Value")
-    EditorGrid.Visible := action = "Screen Shuffle" || action = "Sliding Puzzle"
-    choices := action = "Sliding Puzzle" ? ["3x3", "4x4"] : PunishmentGridChoices()
+    EditorGrid.Visible := action = "Invert Screen" || action = "Screen Shuffle" || action = "Sliding Puzzle"
+    choices := action = "Invert Screen" ? FlipChoices() : action = "Sliding Puzzle" ? ["3x3", "4x4"] : PunishmentGridChoices()
     if EditorGrid.Visible && (!EditorGrid.HasOwnProp("GridKind") || EditorGrid.GridKind != action) {
         selected := EditorGrid.Text
         EditorGrid.Delete()
@@ -679,7 +681,7 @@ UpdateEditorHint(*) {
         EditorGrid.GridKind := action
     }
     EditorGrid.Enabled := !EditorVary.Value
-    EditorValue.Visible := valueLabels.Has(action) && action != "Screen Shuffle" && action != "Sliding Puzzle"
+    EditorValue.Visible := valueLabels.Has(action) && action != "Invert Screen" && action != "Screen Shuffle" && action != "Sliding Puzzle"
     EditorValue.Enabled := !variable || !EditorVary.Value
     limits := PunishmentValueRange(action)
     EditorRange.Visible := IsObject(limits) && EditorValue.Enabled
@@ -741,7 +743,7 @@ EditorSave(*) {
     }
     savedKeys := SharedKeysForAction(action).Length ? EditorRawKeys : Trim(EditorKeys.Value)
     original := Punishments[i]
-    Punishments[i] := {Name: SubStr(Trim(EditorName.Value), 1, 80), Enabled: EditorEnabled.Value = 1, Duration: d, Weight: w, Action: action, Keys: savedKeys, Value: value, Vary: EditorVary.Visible && EditorVary.Value, Grid: action = "Sliding Puzzle" ? SlidingPuzzleGrid(EditorGrid.Text) : PunishmentGrid(EditorGrid.Text)}
+    Punishments[i] := {Name: SubStr(Trim(EditorName.Value), 1, 80), Enabled: EditorEnabled.Value = 1, Duration: d, Weight: w, Action: action, Keys: savedKeys, Value: value, Vary: EditorVary.Visible && EditorVary.Value, Flip: action = "Invert Screen" ? FlipChoices()[FlipChoicesIndex(EditorGrid.Text)] : "Horizontal", Grid: action = "Sliding Puzzle" ? SlidingPuzzleGrid(EditorGrid.Text) : PunishmentGrid(EditorGrid.Text)}
     if !SavePunishments() {
         Punishments[i] := original
         return false
@@ -967,4 +969,10 @@ EditorMouseCaptured(name) {
     EditorKeys.Value := name
     StopEditorKeyCapture()
     UpdateEditorHint()
+}
+
+OpenDiagnosticsMenu(*) {
+    diagnostics := Menu()
+    diagnostics.Add("Open diagnostics", OpenInputLog)
+    diagnostics.Show()
 }

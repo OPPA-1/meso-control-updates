@@ -1,4 +1,4 @@
-
+﻿
 UpdateInteractionPointer(owner, center := false) {
     if !owner.HasOwnProp("Pointer") {
         token := GdipStart()
@@ -8,7 +8,7 @@ UpdateInteractionPointer(owner, center := false) {
             p.Gui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08080020 -DPIScale", "Meso Pointer")
             p.Canvas := Surface(72, 72)
             p.Canvas.Clear(0)
-            p.Canvas.Ellipse(7, 7, 50, 50, 0x3321EAC2, 0xDDA4FFDB, 2)
+            p.Canvas.Ellipse(7, 7, 50, 50, 0x33AC76E7, 0xDDBD8CF4, 2)
             p.Canvas.Polygon([[29, 23], [29, 60], [39, 49], [47, 65], [54, 61], [46, 46], [60, 45]], 0xFF140C22)
             p.Canvas.Polygon([[31, 27], [31, 55], [39, 44], [48, 61], [50, 60], [42, 43], [55, 43]], 0xFFFFFFFF)
             p.Canvas.Flush()

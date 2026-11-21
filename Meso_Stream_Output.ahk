@@ -1,6 +1,7 @@
 ﻿#Requires AutoHotkey v2.0 64-bit
 #SingleInstance Ignore
 #Include Lib\Core.ahk
+#Include Lib\InteractionGuard.ahk
 #Include Lib\OutputState.ahk
 #Include Lib\Draw.ahk
 #Include Lib\GlitchWheel.ahk
@@ -1090,7 +1091,7 @@ CreateHorrorOverlay() {
     if IsObject(HorrorFlash)
         StopHorror()
     HorrorGameRectangle(&x, &y, &w, &h)
-    HorrorFlash := CreateHorrorFlash({X: x, Y: y, W: w, H: h})
+    HorrorFlash := CreateHorrorFlash({X: x, Y: y, W: w, H: h}, "", false, WinExist("ahk_exe destiny2.exe"), StopHorror)
 }
 
 UpdateHorror(now) {

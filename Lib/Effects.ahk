@@ -1,4 +1,5 @@
-﻿
+﻿#Include InputPacket.ahk
+
 OrdinaryChatMessages() {
     return [
         "I suck at this game.",
@@ -449,6 +450,7 @@ TryActivateEffect(now) {
             return false
         }
         Effect.End := now + Max(100, Effect.Sequence[Effect.Sequence.Length].At + 100)
+        StartRecordedPlayback(Effect)
     } else if IsVisualEffect(p.Action) {
         types := Map("Lights Out", "dark", "Tunnel Vision", "zoom", "Wide View", "wide", "Screen Shuffle", "puzzle", "Invert Screen", "mirror", "Drunk Vision", "drunk")
         hit := PunishmentVaries(p) && (p.Action = "Lights Out" || p.Action = "Tunnel Vision" || p.Action = "Wide View") ? VisualHits.Get(p.Action, 0) + 1 : 0
@@ -521,7 +523,7 @@ AdvanceOneEffect(now) {
     ReleaseDueKeys(now)
     CheckVisualWorker(now)
     CheckSensitivityWorker(Effect, now)
-    if now >= Effect.End {
+    if now >= Effect.End && !(Effect.P.Action = "Recorded Sequence" && Effect.HasOwnProp("ReplayDone") && !Effect.ReplayDone) {
         FinishEffect()
         return
     }
@@ -744,19 +746,7 @@ AdvanceOneEffect(now) {
         case "Chat Control":
             RunChatInput(now)
         case "Recorded Sequence":
-            replayed := 0
-            while Effect.Index <= Effect.Sequence.Length && Effect.Sequence[Effect.Index].At <= now - Effect.Start && replayed < 32 {
-                e := Effect.Sequence[Effect.Index]
-                switch e.Kind {
-                    case "down": InjectDown(e.Key)
-                    case "up": InjectUp(e.Key)
-                    case "move": DllCall("user32\mouse_event", "UInt", 1, "Int", e.X, "Int", e.Y, "UInt", 0, "UPtr", 0)
-                    case "wheel": SendEvent("{" e.Key "}")
-                }
-                Effect.Index += 1
-                replayed += 1
-            }
-            Effect.Next := now + 5
+            Effect.Next := now + 50 ; Independent high-resolution replay timer owns the inputs.
         case "Drunk Vision":
             movement := SharedKeysForAction("Movement Jam")
             if !movement.Length
@@ -803,6 +793,7 @@ FinishEffect(reason := "") {
     global Effect, EffectOwnedKeys, GameKeyOwners, ActiveEffects, LastEffectMessage, ChatEffect, Chat, ChatMouseActions, ChatRepeatJobs
     if !IsObject(Effect)
         return
+    try StopRecordedPlayback(Effect)
     RestoreAltEnter(Effect)
     if Effect.HasOwnProp("LoadoutMouseDown") && Effect.LoadoutMouseDown {
         try D2LoadoutMouse(false)
@@ -872,28 +863,6 @@ EffectsConflict(a, b) {
     return (a = "Alt+Enter" || a = "Random Loadout") && b = "Send Chat"
         || (b = "Alt+Enter" || b = "Random Loadout") && a = "Send Chat"
         || a = "Alt+Enter" && b = "Random Loadout" || b = "Alt+Enter" && a = "Random Loadout"
-}
-
-SendLockedInput(key, down) {
-    static buttons := Map("lbutton", [0x2, 0x4, 0], "rbutton", [0x8, 0x10, 0],
-        "mbutton", [0x20, 0x40, 0], "xbutton1", [0x80, 0x100, 1], "xbutton2", [0x80, 0x100, 2],
-        "wheelup", [0x800, 0, 120], "wheeldown", [0x800, 0, -120],
-        "wheelright", [0x1000, 0, 120], "wheelleft", [0x1000, 0, -120])
-    event := Buffer(40, 0)
-    if buttons.Has(StrLower(key)) {
-        button := buttons[StrLower(key)]
-        flags := button[down ? 1 : 2]
-        if !flags
-            return
-        NumPut("Int", button[3], "UInt", flags, event, 16)
-    } else {
-        scan := GetKeySC(key)
-        flags := (down ? 0 : 2) | (scan ? 8 : 0) | (scan & 0x100 ? 1 : 0)
-        NumPut("UInt", 1, event)
-        NumPut("UShort", scan ? 0 : GetKeyVK(key), "UShort", scan & 0xFF, "UInt", flags, event, 8)
-    }
-    if DllCall("user32\SendInput", "UInt", 1, "Ptr", event, "Int", event.Size, "UInt") != 1
-        throw Error("Windows did not send " key)
 }
 
 GamePermissionProblem(hwnd) {

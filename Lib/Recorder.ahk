@@ -125,7 +125,7 @@ RecorderTick(now) {
         ih.Start()
         RecorderStatus("Recording · F8 to stop")
     } else if Recorder.Phase = "recording" {
-        if now >= Recorder.Deadline || !WinActive("ahk_id " Recorder.Target) || Recorder.Events.Length >= 5000 {
+        if now >= Recorder.Deadline || !WinActive("ahk_id " Recorder.Target) || Recorder.Events.Length >= 20000 {
             StopRecording()
             return
         }
@@ -214,9 +214,9 @@ RecordRawMouse(wParam, lParam, msg, hwnd) {
         }
         delta := NumGet(data, header + 6, "Short")
         if flags & 0x400
-            AddRecordedEvent("wheel", delta > 0 ? "WheelUp" : "WheelDown")
+            AddRecordedEvent("wheel", delta > 0 ? "WheelUp" : "WheelDown", delta)
         if flags & 0x800
-            AddRecordedEvent("wheel", delta > 0 ? "WheelRight" : "WheelLeft")
+            AddRecordedEvent("wheel", delta > 0 ? "WheelRight" : "WheelLeft", delta)
     } finally {
         if wParam = 0
             DllCall("user32\DefWindowProcW", "Ptr", hwnd, "UInt", msg, "UPtr", wParam, "Ptr", lParam, "Ptr")
@@ -226,14 +226,15 @@ RecordRawMouse(wParam, lParam, msg, hwnd) {
 
 AddRecordedEvent(kind, key, x := 0, y := 0) {
     global Recorder
-    if Recorder.Events.Length >= 5000 || Recorder.Phase != "recording"
+    if Recorder.Events.Length >= 20000 || Recorder.Phase != "recording"
         return
     at := Min(60000, NowMs() - Recorder.Start)
     if kind = "move" && Recorder.Events.Length {
         last := Recorder.Events[Recorder.Events.Length]
-        if last.Kind = "move" && at - last.At < 12 {
+        if last.Kind = "move" && Floor(at / 4) = Floor(last.At / 4) {
             last.X += x
             last.Y += y
+            last.At := at
             return
         }
     }

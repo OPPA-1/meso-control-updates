@@ -1,4 +1,4 @@
-
+﻿
 StartSlidingPuzzle(item, now) {
     global RuntimeDir
     item.PuzzleFile := RuntimeDir "\puzzle-" NewId() ".state"
@@ -34,7 +34,7 @@ AdvanceSlidingPuzzle(item, now) {
         }
     }
     if !ProcessExist(item.PuzzlePid) {
-        FinishEffect(item.PuzzleReady ? "Puzzle interrupted" : "Puzzle could not start; see input log")
+        FinishEffect(item.PuzzleReady ? "Puzzle interrupted" : "Puzzle could not start; see diagnostics")
         return
     }
     if !item.PuzzleReady && now >= item.PuzzleUntil {

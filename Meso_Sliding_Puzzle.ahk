@@ -1,7 +1,8 @@
-
+﻿
 #Requires AutoHotkey v2.0 64-bit
 #SingleInstance Off
 #Include Lib\Core.ahk
+#Include Lib\InteractionGuard.ahk
 #Include Lib\PuzzleModel.ahk
 #Include Lib\Draw.ahk
 #Include Lib\InteractionPointer.ahk
@@ -10,7 +11,7 @@ DirCreate(RuntimeDir)
 if A_Args.Length != 4
     ExitApp(2)
 Target := Integer(A_Args[1]), GridSize := Integer(A_Args[2]), ParentPid := Integer(A_Args[3]), StatusPath := A_Args[4]
-PuzzleGui := 0, Tiles := [], Header := 0, BlankLabel := 0, Drag := 0, Animation := 0
+PuzzleGui := 0, Tiles := [], Header := 0, BlankLabel := 0, GapIcons := [], Guard := 0, Drag := 0, Animation := 0
 Moves := 0, Finished := false, Hook := 0, HookProc := 0, Mods := Map(), PointerOwner := {Target: Target}
 Board := PuzzleShuffle(GridSize = 4 ? 4 : 3)
 GridSize := GridSize = 4 ? 4 : 3
@@ -32,28 +33,24 @@ try {
     PuzzleGui := Gui("+AlwaysOnTop -Caption +ToolWindow -DPIScale", "Meso Sliding Puzzle")
     PuzzleGui.BackColor := "160F20"
     PuzzleGui.MarginX := 0, PuzzleGui.MarginY := 0
-    PuzzleGui.SetFont("s11 Bold cA4FFDB", "Segoe UI")
+    PuzzleGui.SetFont("s11 Bold cBD8CF4", "Segoe UI")
     Header := PuzzleGui.AddText("x12 y8 w" (GW-24) " h28 Center Background160F20", "SLIDING PUZZLE · Drag tiles into the gap")
-    PuzzleGui.SetFont("s14 Bold cA4FFDB", "Segoe UI")
-    BlankLabel := PuzzleGui.AddText("Center +0x200 Background241733", "SLIDE HERE")
+    PuzzleGui.SetFont("s14 Bold cBD8CF4", "Segoe UI")
+    BlankLabel := PuzzleGui.AddText("x0 y0 w1 h1 Center +0x200 Background241733", "SLIDE HERE")
+    loop 2
+        GapIcons.Push(PuzzleGui.AddPicture("x0 y0 w1 h1", A_ScriptDir "\Meso_Icon.png"))
     loop GridSize*GridSize-1 {
         thumbnail := 0
         if DllCall("dwmapi\DwmRegisterThumbnail", "Ptr", PuzzleGui.Hwnd, "Ptr", Target, "Ptr*", &thumbnail, "Int") < 0
             throw Error("Game preview could not be created")
         Tiles.Push({Thumbnail: thumbnail})
     }
-    HookProc := CallbackCreate(PuzzleKeyboardHook, "", 3)
-    Hook := DllCall("user32\SetWindowsHookExW", "Int", 13, "Ptr", HookProc, "Ptr", DllCall("kernel32\GetModuleHandleW", "Ptr", 0, "Ptr"), "UInt", 0, "Ptr")
-    if !Hook
-        throw Error("Keyboard block could not start")
-    for vk in [0xA2, 0xA3, 0xA4, 0xA5]
-        Mods[vk] := DllCall("user32\GetAsyncKeyState", "Int", vk, "Short") < 0
     OnMessage(0x201, PuzzleMouseDown)
     OnMessage(0x202, PuzzleMouseUp)
     PuzzleGui.OnEvent("Close", (*) => ExitApp())
     PuzzleGui.Show("x" GX " y" GY " w" GW " h" GH)
     WinActivate("ahk_id " PuzzleGui.Hwnd)
-    DllCall("user32\ClipCursor", "Ptr", 0)
+    Guard := InteractionGuard(PuzzleGui.Hwnd, (*) => ExitApp(), true, ParentPid)
     UpdateInteractionPointer(PointerOwner, true)
     RenderPuzzle(NowMs())
     PuzzleReport("ready", Moves)
@@ -73,9 +70,17 @@ PuzzleCellRect(cell) {
     return {X: x, Y: y, W: Round((col+1)*GW/GridSize)-x, H: top+Round((row+1)*height/GridSize)-y}
 }
 RenderPuzzle(now) {
-    global Board, Tiles, GridSize, GW, GH, Blank, BlankLabel, Animation, Drag
+    global Board, Tiles, GridSize, GW, GH, Blank, BlankLabel, GapIcons, Animation, Drag
     blankRect := PuzzleCellRect(Blank)
-    BlankLabel.Move(blankRect.X+3, blankRect.Y+3, blankRect.W-6, blankRect.H-6)
+    ; Move the gap controls only when the blank changes, then erase the old static-control pixels.
+    if !BlankLabel.HasOwnProp("Cell") || BlankLabel.Cell != Blank {
+        BlankLabel.Move(blankRect.X+3, blankRect.Y+3, blankRect.W-6, blankRect.H-6)
+        iconSize := Max(24, Min(54, Round(Min(blankRect.W,blankRect.H)*0.20)))
+        GapIcons[1].Move(blankRect.X+blankRect.W-iconSize-14, blankRect.Y+14, iconSize,iconSize)
+        GapIcons[2].Move(blankRect.X+14, blankRect.Y+blankRect.H-iconSize-14, iconSize,iconSize)
+        BlankLabel.Cell := Blank
+        DllCall("user32\RedrawWindow","Ptr",BlankLabel.Gui.Hwnd,"Ptr",0,"Ptr",0,"UInt",0x185)
+    }
     for index, id in Board {
         if !id
             continue
@@ -105,7 +110,7 @@ PuzzleTick() {
         if !ProcessExist(ParentPid) || !WinExist("ahk_id " Target) || FileExist(StatusPath ".cancel")
             ExitApp()
         if !WinActive("ahk_id " PuzzleGui.Hwnd)
-            ExitApp()
+            return ; The interaction guard restores foreground; a drag never cancels the board.
         now := NowMs()
         if IsObject(Animation) && now >= Animation.Start+160 {
             Animation := 0
@@ -133,6 +138,7 @@ PuzzleTick() {
     } catch as err {
         Finished := true
         PuzzleReport("error", err.Message)
+        LogEvent("Sliding Puzzle: " err.Message " (" err.Line ")")
         ExitApp(1)
     }
 }
@@ -170,26 +176,16 @@ PuzzleMouseUp(*) {
     }
     Animation := {Id: d.Id, Start: NowMs(), X: origin.X+d.DX, Y: origin.Y+d.DY}
 }
-PuzzleKeyboardHook(code, message, data) {
-    global PuzzleGui, Mods
-    if code >= 0 && GuiHwndSafe(PuzzleGui) && WinActive("ahk_id " PuzzleGui.Hwnd) && !(NumGet(data, 8, "UInt") & 0x10) {
-        vk := NumGet(data, 0, "UInt"), up := NumGet(data, 8, "UInt") & 0x80
-        if Mods.Has(vk)
-            Mods[vk] := !up
-        if vk=0x7B && !up && (Mods[0xA2] || Mods[0xA3]) && (Mods[0xA4] || Mods[0xA5])
-            SetTimer((*) => ExitApp(), -1)
-        return 1
-    }
-    return DllCall("user32\CallNextHookEx", "Ptr", 0, "Int", code, "UPtr", message, "Ptr", data, "Ptr")
-}
 PuzzleReport(phase, note) {
     global StatusPath, PuzzleGui, Board
     WriteAtomic(StatusPath ".board", Line(Board*))
     WriteAtomic(StatusPath, Line(ProcessExist(), NowMs(), phase, note, GuiHwndSafe(PuzzleGui)))
 }
 PuzzleCleanup(*) {
-    global Hook, HookProc, Tiles, PuzzleGui, Finished, PointerOwner, Target, PreviousClip
+    global Hook, HookProc, Tiles, PuzzleGui, Finished, PointerOwner, Target, PreviousClip, Guard
     SetTimer(PuzzleTick, 0)
+    if IsObject(Guard)
+        Guard.Close()
     if Hook
         DllCall("user32\UnhookWindowsHookEx", "Ptr", Hook)
     if HookProc
@@ -203,7 +199,6 @@ PuzzleCleanup(*) {
     if !Finished
         try PuzzleReport("stopped", "Puzzle interrupted")
     if focused && WinExist("ahk_id " Target) {
-        DllCall("user32\ClipCursor", "Ptr", PreviousClip)
         try WinActivate("ahk_id " Target)
     }
 }

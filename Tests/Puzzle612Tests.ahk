@@ -1,4 +1,4 @@
-
+﻿
 #Requires AutoHotkey v2.0 64-bit
 #SingleInstance Off
 #Include ..\Lib\Core.ahk
@@ -31,6 +31,14 @@ try {
     hwnd := Integer(f[5])
     if !WinActive("ahk_id " hwnd)
         throw Error("Puzzle must own foreground so game raw input is suspended")
+    ; Focus changes no longer cancel a live puzzle.
+    other := Gui("-DPIScale","Puzzle distraction")
+    other.Show("x0 y0 w250 h200")
+    WinActivate("ahk_id " other.Hwnd)
+    Sleep(200)
+    if !ProcessExist(pid) || !WinActive("ahk_id " hwnd)
+        throw Error("Puzzle must recover from outside activation")
+    other.Destroy()
     board := Fields(Trim(FileRead(status ".board","UTF-8"),Chr(13) Chr(10)))
     blank := 0
     for i,tile in board

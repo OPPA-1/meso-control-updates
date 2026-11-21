@@ -45,7 +45,7 @@ ParseMacroText(text) {
             if f.Length != 5 || !RegExMatch(f[1], "^\d+$") || !IsNumber(f[4]) || !IsNumber(f[5])
                 return []
             at := Integer(f[1])
-            if at < previous || at > 60000 || result.Length >= 5200
+            if at < previous || at > 60000 || result.Length >= 20200
                 return []
             if f[2] != "down" && f[2] != "up" && f[2] != "move" && f[2] != "wheel"
                 return []

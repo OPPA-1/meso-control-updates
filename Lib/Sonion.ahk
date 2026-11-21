@@ -13,7 +13,7 @@ ScheduleSonion(target, now, stage := 0, transcript := 0) {
     preview := IsObject(stage)
     OpenStreamOutput(false)
     Sonion := {Target: target, Phase: "cue", Next: now + (preview ? 1200 : 10000), Step: 0,
-        Replies: 0, Dim: 0, Panel: 0, Phones: [], Scare: 0, Sound: "", RingCheckAt: 0, Flash: 0, Preview: preview, Stage: stage, Transcript: transcript}
+        Replies: 0, Guard: 0, Dim: 0, Panel: 0, Phones: [], Scare: 0, Sound: "", RingCheckAt: 0, Flash: 0, Preview: preview, Stage: stage, Transcript: transcript}
 }
 
 StartSonionPreview(owner, now) {
@@ -56,7 +56,7 @@ AdvanceSonion(now) {
     if !IsSet(Sonion) || !IsObject(Sonion)
         return
     call := Sonion
-    if call.Preview ? !GuiHwndSafe(call.Stage) : !WinActive("ahk_id " call.Target) {
+    if call.Preview ? !GuiHwndSafe(call.Stage) : !WinExist("ahk_id " call.Target) {
         StopSonion()
         return
     }
@@ -64,6 +64,8 @@ AdvanceSonion(now) {
         return
     switch call.Phase {
         case "cue":
+            if !call.Preview
+                call.Guard := InteractionGuard(call.Target, EmergencyStop)
             call.Flash := CreateHorrorFlash(SonionBounds(call), "DO YOU ANSWER", true)
             call.FlashStarted := now
             call.Phase := "red"
@@ -123,6 +125,10 @@ AdvanceSonionPreviewReply(call, now) {
 }
 
 AdvanceSonionReply(call, now) {
+    if !WinActive("ahk_id " call.Target) {
+        call.Next := now + 20
+        return
+    }
     switch call.Step {
         case 0:
             SendEvent("{Enter}")
@@ -143,6 +149,9 @@ AdvanceSonionReply(call, now) {
             call.Step := 0
             if call.Replies = 3 {
                 call.Phase := "waiting"
+                if IsObject(call.Guard)
+                    call.Guard.Close()
+                call.Guard := 0
                 call.Next := now + Random(10000, 30000)
             } else
                 call.Next := now + 160
@@ -156,6 +165,8 @@ SonionBounds(call) {
 
 ShowSonionPhone(call, now) {
     b := SonionBounds(call)
+    if !call.Preview && !IsObject(call.Guard)
+        call.Guard := InteractionGuard(call.Target, EmergencyStop)
     if !GuiHwndSafe(call.Dim) {
         call.Dim := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000020 -DPIScale", "Meso Visual Effect: Darkness")
         call.Dim.BackColor := "050208"
@@ -284,16 +295,6 @@ LayoutSonionPhones(call, now) {
 }
 
 ShakeSonionPhone(call, now) {
-    global InputLockOwners
-    if !call.Preview && !InputLockOwners.Count {
-        clip := Buffer(16, 0), screen := Buffer(16, 0)
-        left := SysGet(76), top := SysGet(77)
-        NumPut("Int", left, "Int", top, "Int", left + SysGet(78), "Int", top + SysGet(79), screen)
-        if DllCall("user32\GetClipCursor", "Ptr", clip, "Int") && !SameMouseClip(clip, screen) {
-            if DllCall("user32\ClipCursor", "Ptr", 0, "Int")
-                call.PhoneClip := clip, call.PhoneScreen := screen
-        }
-    }
     UpdateInteractionPointer(call)
     LayoutSonionPhones(call, now)
     call.Next := now + 16
@@ -420,6 +421,9 @@ CompatibleActivePick(candidate, effects) {
 }
 
 CloseSonionWindows(call) {
+    if call.HasOwnProp("Guard") && IsObject(call.Guard)
+        call.Guard.Close()
+    call.Guard := 0
     CloseInteractionPointer(call)
     for phone in call.Phones {
         StopSpecialSound(phone.Sound)

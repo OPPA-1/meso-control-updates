@@ -2,6 +2,7 @@
 #SingleInstance Force
 #MaxThreadsPerHotkey 1
 #Include Lib\Core.ahk
+#Include Lib\InteractionGuard.ahk
 #Include Lib\ActivityData.ahk
 #Include Lib\ActivityOptions.ahk
 #Include Lib\AltTab.ahk
@@ -19,6 +20,7 @@
 #Include Lib\GlitchWheel.ahk
 #Include Lib\HorrorFlash.ahk
 #Include Lib\GameplayInput.ahk
+#Include Lib\InputPacket.ahk
 #Include Lib\Sensitivity.ahk
 #Include Lib\SlidingPuzzle.ahk
 #Include Lib\PuzzleModel.ahk
@@ -27,6 +29,7 @@
 #Include Lib\EffectLabels.ahk
 #Include Lib\MacroCodec.ahk
 #Include Lib\Recorder.ahk
+#Include Lib\RecordedPlayback.ahk
 #Include Lib\Editor.ahk
 #Include Lib\Scoreboard.ahk
 #Include Lib\RoundModel.ahk

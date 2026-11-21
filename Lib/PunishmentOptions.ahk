@@ -3,7 +3,7 @@
 }
 
 PunishmentVaries(p) {
-    return p.HasOwnProp("Vary") ? p.Vary : p.Action = "Change Mouse Sensitivity"
+    return p.HasOwnProp("Vary") ? p.Vary : (p.Action = "Change Mouse Sensitivity" || p.Action = "Invert Screen")
 }
 
 PunishmentGridChoices() {
@@ -39,9 +39,21 @@ VisualStrength(p, hit) {
         case "Tunnel Vision": return hit ? Min(8.0, 3.0 + (hit - 1) * 0.75) : FixedPunishmentValue(p)
         case "Wide View": return hit ? Max(0.05, 0.25 - (hit - 1) * 0.05) : FixedPunishmentValue(p)
         case "Drunk Vision": return FixedPunishmentValue(p)
+        case "Invert Screen":
+            return PunishmentVaries(p) ? Random(1,3) : p.HasOwnProp("Flip") ? FlipChoicesIndex(p.Flip) : 1
         case "Screen Shuffle":
             options := PunishmentGridChoices()
             return PunishmentVaries(p) ? options[Random(1, options.Length)] : p.HasOwnProp("Grid") ? p.Grid : "2x3"
         default: return p.Value > 0 ? p.Value : 210
     }
+}
+
+FlipChoices() {
+    return ["Horizontal", "Vertical", "Both"]
+}
+FlipChoicesIndex(value) {
+    for i, name in FlipChoices()
+        if name = value
+            return i
+    return 1
 }

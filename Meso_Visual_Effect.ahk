@@ -7,6 +7,7 @@ DirCreate(RuntimeDir)
 if A_Args.Length != 6
     ExitApp(2)
 mode := A_Args[1]
+MirrorAxis := mode = "mirror" ? Max(1,Min(3,Integer(A_Args[4]))) : 1
 target := Integer(A_Args[2])
 duration := Max(100, Min(3600000, Integer(A_Args[3])))
 amount := mode = "puzzle" ? 1.0 : Float(A_Args[4])
@@ -377,11 +378,17 @@ InitializeLiveMirror(w, h) {
 }
 
 ResizeLiveMirror(w, h, commit := true) {
-    global MirrorDevice, MirrorVisual
+    global MirrorDevice, MirrorVisual, MirrorAxis
     if !MirrorVisual
         return
     matrix := Buffer(24, 0)
     NumPut("Float", -1.0, "Float", 0.0, "Float", 0.0, "Float", 1.0, "Float", Float(w), "Float", 0.0, matrix)
+    if MirrorAxis != 1 {
+        NumPut("Float",MirrorAxis = 3 ? -1.0 : 1.0,matrix,0)
+        NumPut("Float",-1.0,matrix,12)
+        NumPut("Float",MirrorAxis = 3 ? Float(w) : 0.0,matrix,16)
+        NumPut("Float",Float(h),matrix,20)
+    }
     MirrorCheck(DCompInvoke(MirrorVisual, 7, "Ptr", matrix.Ptr), "Horizontal reflection transform")
     if commit
         MirrorCheck(DCompInvoke(MirrorDevice, 3), "Horizontal reflection resize")

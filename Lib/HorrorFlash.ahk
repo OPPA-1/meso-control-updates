@@ -1,7 +1,7 @@
-CreateHorrorFlash(bounds, word := "", wideText := false) {
+﻿CreateHorrorFlash(bounds, word := "", wideText := false, target := 0, escape := 0) {
     style := "+AlwaysOnTop -Caption +ToolWindow +E0x08000020 -DPIScale"
     state := {Tint: 0, TextGui: 0, TextToken: 0, TextSurface: 0, Bars: [], LastAlpha: 150,
-        LastDistort: -160, Word: word, OffsetX: 0, OffsetY: 0}
+        Guard: 0, LastDistort: -160, Word: word, OffsetX: 0, OffsetY: 0}
     w := bounds.W, h := bounds.H
     try {
         tint := Gui(style, "Meso Horror Tint")
@@ -34,6 +34,8 @@ CreateHorrorFlash(bounds, word := "", wideText := false) {
         state.TextSurface := Surface(state.TextWidth, state.TextHeight)
         DrawHorrorWord(state)
         words.Show("NoActivate x" state.TextX " y" state.TextY " w" w " h" state.TextHeight)
+        if target
+            state.Guard := InteractionGuard(target, escape)
         return state
     } catch as err {
         CloseHorrorFlash(state)
@@ -84,6 +86,8 @@ UpdateHorrorFlash(state, elapsed, word) {
 
 CloseHorrorFlash(state) {
     if IsObject(state) {
+        if state.HasOwnProp("Guard") && IsObject(state.Guard)
+            state.Guard.Close()
         for g in [state.TextGui, state.Tint]
             if GuiHwndSafe(g)
                 try g.Destroy()

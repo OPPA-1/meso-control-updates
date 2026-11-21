@@ -6,33 +6,25 @@ on:
 permissions:
   contents: write
 jobs:
-  restore:
+  prepare:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: release/6.1.2
-      - name: Restore packaged source files
+      - name: Prepare release source and tests
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --location --retry 3 https://github.com/OPPA-1/meso-control-updates/releases/download/6.1.1/Meso_Control_6_1_1_COMPLETE.zip -o /tmp/meso-baseline.zip
-          echo '22cb47095e25397bb0ced7e7ad94e901a8779668d92e032f068bf17f6219d2b4  /tmp/meso-baseline.zip' | sha256sum -c -
-          mkdir /tmp/meso-baseline
-          unzip -q /tmp/meso-baseline.zip -d /tmp/meso-baseline
-          python3 - <<'PY'
-          import pathlib, shutil
-          root=pathlib.Path('/tmp/meso-baseline')
-          for p in root.rglob('*'):
-              if p.is_file() and not pathlib.Path(p.relative_to(root)).exists():
-                  target=pathlib.Path(p.relative_to(root))
-                  target.parent.mkdir(parents=True,exist_ok=True)
-                  shutil.copyfile(p,target)
-          PY
+          python3 -m py_compile Tests/Prepare612*.py
+          python3 Tests/Prepare612Core.py
+          python3 Tests/Prepare612Modules.py
+          python3 Tests/Prepare612Media.py
+          python3 Tests/Prepare612Updates.py
+          python3 Tests/Prepare612Tests.py
+          git -c core.whitespace=cr-at-eol diff --check
           git config user.name OPPA-1
           git config user.email oap.channel@gmail.com
-          git add Lib Tests Ui Defaults StreamerBot Meso_*.ahk version.ini CREATE_RELEASE.cmd
-          if ! git diff --cached --quiet; then
-            git commit -m 'Preserve complete 6.1.1 source for 6.1.2 validation'
-            git push origin HEAD:release/6.1.2
-          fi
+          git add Lib Tests Ui Meso_*.ahk version.ini 1.wav 2.wav
+          git commit -m 'Implement Meso Control 6.1.2'
+          git push origin HEAD:release/6.1.2

@@ -241,7 +241,11 @@ LoadAndMigratePunishments() {
         needsSave := true
     }
     if IniRead(path, "Meta", "Feature612", "0") != "1" {
-        if !exists.Has("Sliding Puzzle") && result.Length < 200
+        foundPuzzle := false
+        for candidate in result
+            if candidate.Action = "Sliding Puzzle"
+                foundPuzzle := true
+        if !foundPuzzle && result.Length < 200
             for p in defaults
                 if p.Action = "Sliding Puzzle"
                     result.Push(p.Clone())

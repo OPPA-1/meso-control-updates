@@ -67,7 +67,7 @@ try {
     Punishments := LoadAndMigratePunishments()
     count := punishments.Length
     Check(LoadAndMigratePunishments().Length = count, "Migration adds the new punishments once")
-    for name in ["Turn Keyboard Off", "Alt+Enter", "Wide View", "Change Mouse Sensitivity", "Jumpscare"] {
+    for name in ["Sliding Puzzle", "Turn Keyboard Off", "Alt+Enter", "Wide View", "Change Mouse Sensitivity", "Jumpscare"] {
         matches := 0
         for p in punishments
             if p.Action = name
@@ -124,6 +124,7 @@ try {
     TestScareQueue610()
     TestFeature611()
     TestFeature612()
+    TestUpdateSession612()
     Check(DirectArguments(5, 'C:\Meso Control\Meso_Wheel_Trigger.vbs') = '//B //NoLogo "C:\Meso Control\Meso_Wheel_Trigger.vbs" --direct 5 %userName%', "Copied Streamer.bot arguments preserve the quoted path")
     state := Line("meta", 1, 1, 2000) Line("status", 0, 0, 0) Line("wheel", "idle", "", 0, 0, "", 0, 0)
     state .= Line("slots", "idle", "", 0, 0, 0, 0, 0, "", "", "", "") Line("timer", "idle", 0, 0, 0)
@@ -679,4 +680,41 @@ TestFeature612() {
     Check(InStr(source,'"ForceAuto", "1"') && InStr(source,"600000") && InStr(source,"SaveUpdateSession()"),"Auto updates default on with ten minute checks and session persistence")
     source := FileRead(A_ScriptDir "\..\Lib\Sonion.ahk","UTF-8")
     Check(InStr(source,"UpdateInteractionPointer(call, firstPhone)") && InStr(source,"CloseInteractionPointer(call)"),"Sonion owns a visible software pointer")
+}
+
+TestUpdateSession612() {
+    global Queue, AppGui, Slots, Clock, OutputEnabled, OutputPid, Guides, VisualHits, RuntimeDir, SettingsGui, Rounds, Recorder, DirectPending, HorrorEvents, Sonion, ScareQueue, ActiveScare
+    AppGui := Gui("-DPIScale","Update session test")
+    AppGui.Show("NA x25 y25 w320 h180")
+    DirCreate(A_ScriptDir "\.updates")
+    try {
+        Queue := SpinQueue()
+        Queue.Accept("pending-612",false,NowMs(),"meso",true,2)
+        Queue.Paused := false
+        Queue.Completed := 7
+        Queue.Seen["already-redeemed-612"] := NowMs()
+        Slots := {Phase:"idle",Locked:4,Id:"activity-612",Values:["RAID","LAST WISH","FULL CLEAR","TITAN"]}
+        Clock := ActivityClock()
+        Clock.Phase := "ready", Clock.Generation := 11
+        OutputEnabled := false, OutputPid := 0, Guides := true
+        VisualHits := Map("Lights Out",3,"Tunnel Vision",2,"Wide View",1)
+        SaveUpdateSession()
+        Queue.Paused := true, Queue.Completed := 0, Queue.Seen := Map()
+        Clock.Phase := "idle", Clock.Generation := 0
+        Slots.Values := ["","","",""], VisualHits := Map(), Guides := false
+        Check(RestoreUpdateSession(),"Update session restores successfully")
+        Check(!Queue.Paused && Queue.Count()=1 && Queue.Completed=7,"Update keeps queue state and completed count")
+        Check(Queue.Seen.Has("already-redeemed-612"),"Update preserves redemption deduplication")
+        Check(Clock.Phase="ready" && Clock.Generation=11 && Slots.Values[2]="LAST WISH" && Slots.Locked=4,"Update keeps activity results and ready timer")
+        Check(Guides && VisualHits["Lights Out"]=3 && VisualHits["Tunnel Vision"]=2,"Update keeps overlays and progressive strength")
+        Check(!FileExist(A_ScriptDir "\.updates\session.ini"),"Update session is consumed once")
+        SettingsGui := 0, Rounds := RoundCycle(), Recorder := {Phase:"idle"}, DirectPending := []
+        HorrorEvents := [], Sonion := 0, ScareQueue := [], ActiveScare := 0
+        Check(UpdateCanInstall(NowMs()),"A quiet update can preserve pending spins")
+        ScareQueue.Push({Due:NowMs()+5000})
+        Check(!UpdateCanInstall(NowMs()),"An update waits for delayed scares")
+        ScareQueue := []
+    } finally {
+        AppGui.Destroy()
+    }
 }

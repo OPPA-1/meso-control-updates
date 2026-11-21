@@ -12,7 +12,8 @@ PlayLocalScare(name, duration) {
     static serial := 0
     if !IsSet(LocalScareSounds)
         LocalScareSounds := Map()
-    alias := "mesolocalscare" ++serial
+    serial += 1
+    alias := "mesolocalscare" serial
     path := SpecialAudioPath(name)
     if LocalScareMci("open " Chr(34) path Chr(34) " alias " alias) {
         LogEvent("Local jumpscare audio could not open: " name)

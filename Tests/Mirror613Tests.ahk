@@ -23,8 +23,13 @@ try {
                 if packet.Length>=4 && (packet[3]="ready" || packet[3]="error")
                     break
             }
-            if packet.Length<4 || packet[3]!="ready"
+            if packet.Length<4 || packet[3]!="ready" {
+                DetectHiddenWindows(true)
+                for window in WinGetList("ahk_pid " pid) {
+                    try FileAppend("Mirror worker window: " WinGetTitle("ahk_id " window) " | " WinGetText("ahk_id " window) "`n","*")
+                }
                 throw Error("Mirror startup " axis ": " (packet.Length>=4 ? packet[4] : "no status"))
+            }
             Sleep(650)
             for i,offset in [[200,150],[600,150],[200,450],[600,450]] {
                 color := PixelGetColor(60+offset[1],40+offset[2])

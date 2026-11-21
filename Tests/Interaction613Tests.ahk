@@ -1,4 +1,4 @@
-#Requires AutoHotkey v2.0 64-bit
+﻿#Requires AutoHotkey v2.0 64-bit
 #SingleInstance Off
 #Include ..\Lib\Core.ahk
 #Include ..\Lib\InteractionGuard.ahk
@@ -30,6 +30,15 @@ try {
     Sleep(120)
     if !WinActive("ahk_id " game.Hwnd)
         throw Error("Alt+Tab escaped the interaction")
+    ; A puzzle has priority over a text/phone guard, including if the latter closes first.
+    lower := InteractionGuard(other.Hwnd)
+    Sleep(70)
+    if !WinActive("ahk_id " game.Hwnd)
+        throw Error("Overlapping guards fought for foreground")
+    lower.Close()
+    Sleep(40)
+    if !WinActive("ahk_id " game.Hwnd)
+        throw Error("Closing a lower-priority guard unlocked the puzzle")
     guard.Close()
     current := Buffer(16,0)
     DllCall("user32\GetClipCursor","Ptr",current)

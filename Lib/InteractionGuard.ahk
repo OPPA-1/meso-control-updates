@@ -67,11 +67,14 @@ class InteractionGuard {
                 SetTimer(ObjBindMethod(this,"Abort"),-1)
                 return 1
             }
+            ; Key-up events always pass so a modifier held before the sequence cannot get stuck.
+            if up
+                return DllCall("user32\CallNextHookEx","Ptr",0,"Int",code,"UPtr",message,"Ptr",data,"Ptr")
             ; Synthetic game inputs (Enter and Ctrl+V) pass, but app-switch chords do not.
             alt := this.Mods[0xA4] || this.Mods[0xA5]
             ctrl := this.Mods[0xA2] || this.Mods[0xA3]
             if vk=0x5B || vk=0x5C || vk=0xA4 || vk=0xA5 || vk=0x12
-                || vk=0x09 && (alt || ctrl) || vk=0x1B && (alt || ctrl)
+                || alt || vk=0x09 && ctrl || vk=0x1B && (alt || ctrl)
                 || this.BlockKeys && !(flags & 0x10)
                 return 1
         }
@@ -91,6 +94,7 @@ class InteractionGuard {
         this.Closed := true
         SetTimer(this.Timer,0)
         OnExit(this.ExitHandler,0)
+        this.Timer := 0, this.ExitHandler := 0
         if this.Hook
             DllCall("user32\UnhookWindowsHookEx","Ptr",this.Hook)
         if this.Proc

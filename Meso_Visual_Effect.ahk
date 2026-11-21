@@ -388,7 +388,8 @@ ResizeLiveMirror(w, h, commit := true) {
         NumPut("Float",MirrorAxis = 3 ? Float(w) : 0.0,matrix,16)
         NumPut("Float",Float(h),matrix,20)
     }
-    MirrorCheck(DCompInvoke(MirrorVisual, 7, "Ptr", matrix.Ptr), "Horizontal reflection transform")
+    ; The matrix overload occupies slot 8 in the Windows COM ABI. Slot 7 takes a transform object.
+    MirrorCheck(DCompInvoke(MirrorVisual, 8, "Ptr", matrix.Ptr), "Horizontal reflection transform")
     if commit
         MirrorCheck(DCompInvoke(MirrorDevice, 3), "Horizontal reflection resize")
 }

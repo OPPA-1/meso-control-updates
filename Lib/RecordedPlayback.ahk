@@ -1,4 +1,4 @@
-; Replay uses its own monotonic clock rather than the wheel's UI timer.
+﻿; Replay uses its own monotonic clock rather than the wheel's UI timer.
 StartRecordedPlayback(item) {
     item.ReplayClock := PerfNowMs(), item.ReplayHeld := Map(), item.ReplayDone := false
     item.ReplayHeld.CaseSense := "Off"
@@ -68,6 +68,7 @@ StopRecordedPlayback(item) {
     if !item.HasOwnProp("ReplayTimer")
         return
     SetTimer(item.ReplayTimer,0)
+    item.DeleteProp("ReplayTimer")
     for key in item.ReplayHeld.Clone()
         try ReleaseRecordedKey(item,key)
     if item.ReplayPeriod {

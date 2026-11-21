@@ -125,6 +125,7 @@ try {
     TestFeature611()
     TestFeature612()
     TestUpdateSession612()
+    TestPuzzleController612()
     Check(DirectArguments(5, 'C:\Meso Control\Meso_Wheel_Trigger.vbs') = '//B //NoLogo "C:\Meso Control\Meso_Wheel_Trigger.vbs" --direct 5 %userName%', "Copied Streamer.bot arguments preserve the quoted path")
     state := Line("meta", 1, 1, 2000) Line("status", 0, 0, 0) Line("wheel", "idle", "", 0, 0, "", 0, 0)
     state .= Line("slots", "idle", "", 0, 0, 0, 0, 0, "", "", "", "") Line("timer", "idle", 0, 0, 0)
@@ -724,4 +725,23 @@ TestUpdateSession612() {
     } finally {
         AppGui.Destroy()
     }
+}
+
+TestPuzzleController612() {
+    global RuntimeDir, ActiveEffects
+    now := NowMs()
+    p := {Name:"Sliding Puzzle",Action:"Sliding Puzzle",Keys:"",Duration:1,Weight:1,Value:0}
+    item := StartEffect(p,true,now,"puzzle-controller-test")
+    item.Preview := false
+    item.Phase := "running"
+    item.PuzzlePid := ProcessExist()
+    item.PuzzleFile := RuntimeDir "\puzzle-controller.state"
+    item.PuzzleReady := false
+    item.PuzzleUntil := now+8000
+    WriteAtomic(item.PuzzleFile,Line(ProcessExist(),now,"ready",2,0))
+    WithEffect(item,AdvanceSlidingPuzzle,item,now)
+    Check(item.PuzzleReady && InStr(item.Note,"2 moves"),"Controller reads puzzle worker state")
+    WriteAtomic(item.PuzzleFile,Line(ProcessExist(),now,"solved",3,0))
+    WithEffect(item,AdvanceSlidingPuzzle,item,now+20)
+    Check(!ActiveEffects.Length,"Solved puzzle releases its controller effect")
 }

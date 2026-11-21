@@ -376,15 +376,17 @@ RestoreUpdateSession() {
         Slots.Pools := []
         try {
             for row in StrSplit(FileRead(RuntimeDir "\update-slots.state","UTF-8"),Chr(10)) {
-                fields := Fields(row)
-                if fields.Length < 2 || !IsNumber(fields[1]) || fields[1] != Slots.Pools.Length+1 || Slots.Pools.Length>=4
+                parts := Fields(row)
+                if parts.Length < 2 || !IsNumber(parts[1]) || parts[1] != Slots.Pools.Length+1 || Slots.Pools.Length>=4
                     continue
                 pool := []
-                loop fields.Length-1
-                    pool.Push(fields[A_Index+1])
+                loop parts.Length-1
+                    pool.Push(parts[A_Index+1])
                 Slots.Pools.Push(pool)
             }
             FileDelete(RuntimeDir "\update-slots.state")
+        } catch as err {
+            LogEvent("Update reel recovery: " err.Message)
         }
         Slots.Locked := Integer(IniRead(path, "Slots", "Locked", "0"))
         Slots.Id := IniRead(path, "Slots", "Id", "")
@@ -399,6 +401,8 @@ RestoreUpdateSession() {
                     Queue.Seen[f[1]] := f[2]+0
             }
             FileDelete(RuntimeDir "\update-seen.state")
+        } catch as err {
+            LogEvent("Update redemption recovery: " err.Message)
         }
         x := Integer(IniRead(path, "Session", "X", "0")), y := Integer(IniRead(path, "Session", "Y", "0"))
         WinMove(x, y,,, "ahk_id " AppGui.Hwnd)

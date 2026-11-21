@@ -18,17 +18,17 @@ AdvanceSlidingPuzzle(item, now) {
         return
     state := ""
     try state := Trim(FileRead(item.PuzzleFile, "UTF-8"), Chr(13) Chr(10))
-    fields := Fields(state)
-    if fields.Length >= 5 && fields[1] = item.PuzzlePid {
-        switch fields[3] {
+    packet := Fields(state)
+    if packet.Length >= 5 && packet[1] = item.PuzzlePid {
+        switch packet[3] {
             case "ready":
                 item.PuzzleReady := true
-                item.Note := "Solve puzzle · " fields[4] " moves"
+                item.Note := "Solve puzzle · " packet[4] " moves"
             case "solved":
                 FinishEffect("Puzzle solved")
                 return
             case "stopped", "error":
-                FinishEffect(fields[4])
+                FinishEffect(packet[4])
                 return
         }
     }

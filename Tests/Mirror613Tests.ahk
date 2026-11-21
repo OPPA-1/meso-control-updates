@@ -1,4 +1,4 @@
-#Requires AutoHotkey v2.0 64-bit
+﻿#Requires AutoHotkey v2.0 64-bit
 #SingleInstance Off
 #Include ..\Lib\Core.ahk
 OnError((err,mode)=>(FileAppend(err.Message " (" err.Line ")`n","*"),ExitApp(1)))
@@ -13,10 +13,10 @@ try {
     for axis,expected in [[0x00FF00,0xFF0000,0xFFFF00,0x0000FF],[0x0000FF,0xFFFF00,0xFF0000,0x00FF00],[0xFFFF00,0x0000FF,0x00FF00,0xFF0000]] {
         WinActivate("ahk_id " game.Hwnd)
         status := RuntimeDir "\mirror" axis ".state", pid := 0
-        cmd := Chr(34) A_AhkPath Chr(34) " " Chr(34) A_ScriptDir "\..\Meso_Visual_Effect.ahk" Chr(34) " mirror " game.Hwnd " 6000 " axis " " ProcessExist() " " Chr(34) status Chr(34)
+        cmd := Chr(34) A_AhkPath Chr(34) " /ErrorStdOut=UTF-8 " Chr(34) A_ScriptDir "\..\Meso_Visual_Effect.ahk" Chr(34) " mirror " game.Hwnd " 12000 " axis " " ProcessExist() " " Chr(34) status Chr(34)
         Run(cmd,,, &pid)
         try {
-            deadline := NowMs()+3500, packet := []
+            deadline := NowMs()+8000, packet := []
             while NowMs()<deadline {
                 Sleep(50)
                 try packet := Fields(Trim(FileRead(status,"UTF-8"),"`r`n"))

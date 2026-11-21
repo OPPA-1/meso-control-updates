@@ -110,6 +110,7 @@ RecorderTick(now) {
         }
         Recorder.Target := target
         Recorder.Start := now
+        Recorder.Clock := PerfNowMs()
         Recorder.Deadline := now + 60000
         ih := InputHook(Recorder.Mode = "pad" ? "L0 I1" : "V L0 I1")
         ih.KeyOpt("{All}", Recorder.Mode = "pad" ? "NS" : "N")
@@ -228,7 +229,7 @@ AddRecordedEvent(kind, key, x := 0, y := 0) {
     global Recorder
     if Recorder.Events.Length >= 20000 || Recorder.Phase != "recording"
         return
-    at := Min(60000, NowMs() - Recorder.Start)
+    at := Min(60000, Max(0, Round(PerfNowMs() - Recorder.Clock)))
     if kind = "move" && Recorder.Events.Length {
         last := Recorder.Events[Recorder.Events.Length]
         if last.Kind = "move" && Floor(at / 4) = Floor(last.At / 4) {
@@ -253,7 +254,7 @@ StopRecording(*) {
     SetRawMouseSink()
     if oldPhase = "recording" {
         for key in Recorder.Down
-            Recorder.Events.Push({At: Min(60000, NowMs() - Recorder.Start), Kind: "up", Key: key, X: 0, Y: 0})
+            Recorder.Events.Push({At: Min(60000, Max(0, Round(PerfNowMs() - Recorder.Clock))), Kind: "up", Key: key, X: 0, Y: 0})
     }
     Recorder.Down := Map()
     if GuiHwndSafe(CapturePad)

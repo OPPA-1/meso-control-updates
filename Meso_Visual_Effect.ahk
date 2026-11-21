@@ -129,6 +129,7 @@ try {
         throw Error("Visual transparency initialization failed (" A_LastError ")")
     if !WinActive("ahk_id " target) || FileExist(StatusPath ".cancel")
         throw Error("Game lost focus during visual startup")
+    ReportVisual("starting", "Showing visual window")
     EffectGui.Show("NoActivate x" x " y" y " w" w " h" h)
     if mode = "wide" {
         OnMessage(0x20, HideOverlayCursor)
@@ -140,6 +141,7 @@ try {
         throw Error("Visual overlay window did not become visible")
     finish := NowMs() + duration
     TimerResolutionActive := DllCall("winmm\timeBeginPeriod", "UInt", 1, "UInt") = 0
+    ReportVisual("starting", "Preparing live source")
     UpdateVisualFrame(true)
     if mode = "mirror"
         InitializeLiveMirror(w, h)
@@ -357,20 +359,25 @@ InitializeLiveMirror(w, h) {
     outputStyle := DllCall("user32\GetWindowLongPtrW", "Ptr", EffectGui.Hwnd, "Int", -20, "Ptr")
     if outputStyle & 0x00080000
         throw Error("Composition host must be non-layered")
+    ReportVisual("starting", "Creating graphics device")
     hr := DllCall("d3d11\D3D11CreateDevice", "Ptr", 0, "UInt", 1, "Ptr", 0, "UInt", 0x20, "Ptr", 0, "UInt", 0, "UInt", 7, "Ptr*", &MirrorD3DDevice, "Ptr", 0, "Ptr*", &MirrorD3DContext, "Int")
     if hr < 0
         hr := DllCall("d3d11\D3D11CreateDevice", "Ptr", 0, "UInt", 5, "Ptr", 0, "UInt", 0x20, "Ptr", 0, "UInt", 0, "UInt", 7, "Ptr*", &MirrorD3DDevice, "Ptr", 0, "Ptr*", &MirrorD3DContext, "Int")
     MirrorCheck(hr, "Direct3D device initialization")
+    ReportVisual("starting", "Creating composition device")
     iidDXGI := MirrorGuid("{54ec77fa-1377-44e6-8c32-88fd5f44c84c}")
     MirrorCheck(DCompInvoke(MirrorD3DDevice, 0, "Ptr", iidDXGI.Ptr, "Ptr*", &MirrorDXGIDevice), "Direct3D graphics interface")
     iidDComp := MirrorGuid("{C37EA93A-E7AA-450D-B16F-9746CB0407F3}")
     MirrorCheck(DllCall("dcomp\DCompositionCreateDevice2", "Ptr", MirrorDXGIDevice, "Ptr", iidDComp.Ptr, "Ptr*", &MirrorDevice, "Int"), "DirectComposition initialization")
     MirrorCheck(DCompInvoke(MirrorDevice, 6, "Ptr", EffectGui.Hwnd, "Int", 1, "Ptr*", &MirrorTarget), "Composition window target")
     MirrorCheck(DCompInvoke(MirrorDevice, 7, "Ptr*", &MirrorVisual), "Composition visual")
+    ReportVisual("starting", "Attaching live magnifier surface")
     MirrorCheck(DCompInvoke(MirrorDevice, 11, "Ptr", mag, "Ptr*", &MirrorSurface), "Layered magnifier surface")
     MirrorCheck(DCompInvoke(MirrorVisual, 15, "Ptr", MirrorSurface), "Live magnifier content")
+    ReportVisual("starting", "Applying reflection transform")
     ResizeLiveMirror(w, h, false)
     MirrorCheck(DCompInvoke(MirrorTarget, 3, "Ptr", MirrorVisual), "Composition root")
+    ReportVisual("starting", "Committing reflection")
     cloaked := Buffer(4, 0)
     NumPut("Int", 1, cloaked)
     MirrorCheck(DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", mag, "UInt", 14, "Ptr", cloaked.Ptr, "UInt", 4, "Int"), "Layered magnifier cloaking")

@@ -319,7 +319,10 @@ RevertPreviousUpdate(*) {
 
 SaveUpdateSession() {
     global Queue, AppGui, Slots, Clock, OutputEnabled, OutputPid, Guides, VisualHits, RuntimeDir
-    WinGetPos(&x, &y, &w, &h, "ahk_id " AppGui.Hwnd)
+    rect := Buffer(16,0)
+    if !DllCall("user32\GetWindowRect","Ptr",AppGui.Hwnd,"Ptr",rect)
+        throw Error("Could not save the controller position")
+    x := NumGet(rect,0,"Int"), y := NumGet(rect,4,"Int")
     visible := DllCall("user32\IsWindowVisible", "Ptr", AppGui.Hwnd, "Int")
     nl := Chr(10)
     text := "[Session]" nl "SavedAt=" NowMs() nl "Paused=" (Queue.Paused ? 1 : 0) nl "Completed=" Queue.Completed nl "X=" x nl "Y=" y nl "Visible=" visible nl "Output=" (OutputEnabled ? 1 : 0) nl "Guides=" (Guides ? 1 : 0) nl
@@ -405,7 +408,7 @@ RestoreUpdateSession() {
             LogEvent("Update redemption recovery: " err.Message)
         }
         x := Integer(IniRead(path, "Session", "X", "0")), y := Integer(IniRead(path, "Session", "Y", "0"))
-        WinMove(x, y,,, "ahk_id " AppGui.Hwnd)
+        DllCall("user32\SetWindowPos","Ptr",AppGui.Hwnd,"Ptr",0,"Int",x,"Int",y,"Int",0,"Int",0,"UInt",0x15)
         if IniRead(path, "Session", "Visible", "1") = "1"
             AppGui.Show("NA")
         else

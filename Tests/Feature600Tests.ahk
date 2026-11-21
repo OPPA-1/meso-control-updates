@@ -706,11 +706,13 @@ TestUpdateSession612() {
         Clock.Phase := "ready", Clock.Generation := 11
         OutputEnabled := false, OutputPid := 0, Guides := true
         VisualHits := Map("Lights Out",3,"Tunnel Vision",2,"Wide View",1)
+        AppGui.Hide()
         SaveUpdateSession()
         Queue.Paused := true, Queue.Completed := 0, Queue.Seen := Map()
         Clock.Phase := "idle", Clock.Generation := 0
         Slots.Values := ["","","",""], VisualHits := Map(), Guides := false
         Check(RestoreUpdateSession(),"Update session restores successfully")
+        Check(!DllCall("user32\IsWindowVisible","Ptr",AppGui.Hwnd,"Int"),"Updating a tray controller does not open its window")
         Check(!Queue.Paused && Queue.Count()=1 && Queue.Completed=7,"Update keeps queue state and completed count")
         Check(Queue.Seen.Has("already-redeemed-612"),"Update preserves redemption deduplication")
         Check(Clock.Phase="ready" && Clock.Generation=11 && Slots.Values[2]="LAST WISH" && Slots.Locked=2 && Slots.Phase="wait" && Slots.Pools[2][2]="VOW","Update keeps activity results and ready timer")

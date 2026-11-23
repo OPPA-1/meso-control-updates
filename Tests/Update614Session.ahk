@@ -94,6 +94,7 @@ PrepareSessionTest614() {
         FileAppend("Requesting quiet update" Chr(10),A_ScriptDir "\session-test-progress.txt")
         SetTimer(DumpSessionTest614,500)
         DumpSessionTest614()
+        Critical("On")
         OpenSettings()
         Updates.Requested := true
         RefreshUpdateStatus()
@@ -103,6 +104,7 @@ PrepareSessionTest614() {
         Updates.AutoCheck := true
         Updates.ReadyAt := NowMs()-2000
         WriteAtomic(RuntimeDir "\session-test-ready.state","ready")
+        Critical("Off")
     } catch as err {
         FileAppend(err.Message " (" err.File ":" err.Line ")" Chr(10),A_ScriptDir "\session-test-error.txt")
         ExitApp(1)

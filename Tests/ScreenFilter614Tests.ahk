@@ -4,6 +4,7 @@
 #Include ..\Lib\ScreenFilter.ahk
 #Include ..\Lib\Draw.ahk
 #Include ..\Lib\PuzzleBadge.ahk
+#Include ..\Lib\VisualCursor.ahk
 OnError((err,mode)=>(FileAppend(err.Message " (" err.File ":" err.Line ")`n","*"),ExitApp(1)))
 RuntimeDir := A_Temp "\MesoFilter614-" NewId()
 DirCreate(RuntimeDir)
@@ -12,7 +13,7 @@ game := Gui("-Caption -DPIScale","614 live screen test")
 for tile in [[0,0,"FF0000"],[400,0,"00FF00"],[0,300,"0000FF"],[400,300,"FFFF00"]]
     game.AddText("x" tile[1] " y" tile[2] " w400 h300 Background" tile[3],"")
 game.Show("x60 y40 w800 h600")
-pid := 0, status := "", badges := 0
+pid := 0, status := "", badges := 0, cursorA := {}, cursorB := {}, cursorLib := 0
 try {
     b := ScreenFilterBounds("split",-1920,0,1920,1080)
     if b.X!=-1920 || b.W!=960 || b.SourceX!=-960
@@ -64,11 +65,26 @@ try {
         if color=0x241733 || ((color>>16)&255)=((color>>8)&255) && ((color>>8)&255)=(color&255)
             throw Error("Puzzle badge did not render its purple Meso artwork")
     }
-    FileAppend("PASS live Mirror Screen pixels, source refresh, Gaussian blur strength, effect cleanup and transparent Meso puzzle badges`n","*")
+    cursorLib := DllCall("kernel32\LoadLibraryW","WStr",A_WinDir "\System32\Magnification.dll","Ptr")
+    if !cursorLib || !DllCall("Magnification\MagInitialize","Int")
+        throw Error("Cursor test could not initialize magnification")
+    if !HideVisualCursor(cursorA) || !HideVisualCursor(cursorB)
+        throw Error("Visual cursor ownership could not start")
+    if RestoreVisualCursor(cursorA) || !FileExist(cursorB.CursorLease)
+        throw Error("Ending one effect released another effect's hidden cursor")
+    if !RestoreVisualCursor(cursorB)
+        throw Error("The last visual effect did not restore the system cursor")
+    FileAppend("PASS live Mirror Screen pixels, source refresh, Gaussian blur strength, effect cleanup, transparent Meso puzzle badges and overlapping cursor ownership`n","*")
 } finally {
     if pid
         StopFilter614(pid,status)
     ClosePuzzleBadges(badges)
+    if cursorLib {
+        RestoreVisualCursor(cursorA)
+        RestoreVisualCursor(cursorB)
+        DllCall("Magnification\MagUninitialize","Int")
+        DllCall("kernel32\FreeLibrary","Ptr",cursorLib)
+    }
     game.Destroy()
     DirDelete(RuntimeDir,true)
 }

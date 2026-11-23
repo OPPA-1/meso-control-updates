@@ -276,7 +276,7 @@ TestGameplayInput() {
     Check(PunishmentValueRange("Tunnel Vision").Min = 1.1 && PunishmentValueRange("Tunnel Vision").Max = 8, "Tunnel Vision supports zoom beyond 4x")
     Check(FixedPunishmentValue({Action: "Wide View", Value: 3}) = 0.25, "Wide View uses its supported upper limit")
     Check(FixedPunishmentValue({Action: "Change Mouse Sensitivity", Value: 10}) = 5, "Manual sensitivity uses its supported upper limit")
-    visual := FileRead(A_ScriptDir "\..\Meso_Visual_Effect.ahk", "UTF-8")
+    visual := FileRead(A_ScriptDir "\..\Lib\VisualCursor.ahk", "UTF-8")
     Check(InStr(visual, 'MagShowSystemCursor", "Int", false') && InStr(visual, 'MagShowSystemCursor", "Int", true'), "Wide View hides and restores the system cursor")
     TestInputHooks()
 }

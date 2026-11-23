@@ -2,6 +2,7 @@
 #SingleInstance Off
 #Include Lib\Core.ahk
 #Include Lib\PunishmentOptions.ahk
+#Include Lib\VisualCursor.ahk
 RuntimeDir := A_ScriptDir "\runtime"
 DirCreate(RuntimeDir)
 if A_Args.Length != 6
@@ -15,6 +16,7 @@ grid := mode = "puzzle" && RegExMatch(A_Args[4], "^[2-5]x[2-6]$") ? StrSplit(A_A
 PuzzleRows := Integer(grid[1]), PuzzleColumns := Integer(grid[2])
 WideThumbnail := 0
 WideCursorHidden := false
+CursorOwner := {}
 parent := Integer(A_Args[5])
 StatusPath := A_Args[6]
 finish := 0
@@ -133,7 +135,7 @@ try {
     EffectGui.Show("NoActivate x" x " y" y " w" w " h" h)
     if mode = "wide" || mode = "mirror" {
         OnMessage(0x20, HideOverlayCursor)
-        WideCursorHidden := DllCall("Magnification\MagShowSystemCursor", "Int", false, "Int") != 0
+        WideCursorHidden := HideVisualCursor(CursorOwner)
         if !WideCursorHidden
             LogEvent("Visual effect could not hide the Windows system cursor")
     }
@@ -209,7 +211,7 @@ RunVisualFrames() {
 
 UpdateVisualFrame(force := false) {
     global mode, target, parent, finish, EffectGui, mag, amount, StatusPath, LastBounds, LastRect
-    global WorkerClosing, DarkPanel, PuzzleMags, PuzzleOrder, StartupTick, MirrorVisual, WideThumbnail, sway
+    global WorkerClosing, DarkPanel, PuzzleMags, PuzzleOrder, StartupTick, MirrorVisual, WideThumbnail, sway, CursorOwner
     if WorkerClosing
         return
     if NowMs() >= finish || !ProcessExist(parent) || FileExist(StatusPath ".cancel") {
@@ -220,6 +222,7 @@ UpdateVisualFrame(force := false) {
         ReportVisual("stopped", "Game lost focus")
         ExitApp()
     }
+    MaintainVisualCursor(CursorOwner)
     try {
         WinGetClientPos(&x, &y, &w, &h, "ahk_id " target)
         if w < 100 || h < 100
@@ -404,12 +407,12 @@ ReleaseMirrorInterface(&interfacePtr) {
 Cleanup(*) {
     global EffectGui, MirrorDevice, MirrorTarget, MirrorVisual, MirrorSurface
     global MirrorD3DDevice, MirrorD3DContext, MirrorDXGIDevice
-    global initialized, MagLibrary, WorkerClosing, StatusPath, mag, DarkPanel, PuzzleMags, PuzzleOrder, TimerResolutionActive, WideThumbnail, WideCursorHidden
+    global initialized, MagLibrary, WorkerClosing, StatusPath, mag, DarkPanel, PuzzleMags, PuzzleOrder, TimerResolutionActive, WideThumbnail, WideCursorHidden, CursorOwner
     if WorkerClosing
         return
     WorkerClosing := true
     if WideCursorHidden {
-        try DllCall("Magnification\MagShowSystemCursor", "Int", true, "Int")
+        try RestoreVisualCursor(CursorOwner)
         WideCursorHidden := false
     }
     if WideThumbnail

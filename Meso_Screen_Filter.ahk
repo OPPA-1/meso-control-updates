@@ -3,6 +3,7 @@
 #Include Lib\Core.ahk
 #Include Lib\PunishmentOptions.ahk
 #Include Lib\ScreenFilter.ahk
+#Include Lib\VisualCursor.ahk
 RuntimeDir := A_ScriptDir "\runtime"
 DirCreate(RuntimeDir)
 if A_Args.Length != 6 || (A_Args[1] != "blur" && A_Args[1] != "split")
@@ -12,6 +13,7 @@ Amount := FixedPunishmentValue({Action: "Hazy Vision", Value: Float(A_Args[4])})
 Duration := Max(100, Min(3600000, Integer(A_Args[3]))), Finish := NowMs()+Duration
 Host := 0, Mag := 0, Device := 0, Device3 := 0, CompositionTarget := 0, Visual := 0, Content := 0, Blur := 0
 Initialized := false, CursorHidden := false, Closing := false, LastBounds := "", Frame := 0, MagLibrary := 0
+CursorOwner := {}
 OnExit(FilterCleanup)
 OnMessage(0x8001, (*) => ExitApp())
 OnMessage(0x21, (*) => 3)
@@ -58,7 +60,7 @@ try {
         ScreenFilterCheck(ScreenFilterCall(Visual, 10, "Ptr", Blur), "Blur visual")
     }
     ScreenFilterCheck(ScreenFilterCall(CompositionTarget, 3, "Ptr", Visual), "Screen root")
-    CursorHidden := DllCall("Magnification\MagShowSystemCursor", "Int", false, "Int") != 0
+    CursorHidden := HideVisualCursor(CursorOwner)
     FilterFrame()
     ScreenFilterCheck(ScreenFilterCall(Device, 3), "Screen commit")
     FilterReport("ready", "Active")
@@ -71,7 +73,7 @@ try {
 return
 
 FilterFrame() {
-    global Mode, Target, ParentPid, StatusPath, Finish, Host, Mag, Device, Visual, LastBounds, Closing, Frame
+    global Mode, Target, ParentPid, StatusPath, Finish, Host, Mag, Device, Visual, LastBounds, Closing, Frame, CursorOwner
     if Closing
         return
     if NowMs() >= Finish || !ProcessExist(ParentPid) || FileExist(StatusPath ".cancel") || !WinActive("ahk_id " Target) {
@@ -79,6 +81,7 @@ FilterFrame() {
         ExitApp()
     }
     try {
+        MaintainVisualCursor(CursorOwner)
         WinGetClientPos(&x, &y, &w, &h, "ahk_id " Target)
         if w < 100 || h < 100
             throw Error("Game window has no usable client area")
@@ -121,13 +124,13 @@ FilterReport(state, note) {
 }
 
 FilterCleanup(*) {
-    global Closing, Host, Mag, Initialized, CursorHidden, Blur, Visual, Content, CompositionTarget, Device3, Device, StatusPath, MagLibrary
+    global Closing, Host, Mag, Initialized, CursorHidden, Blur, Visual, Content, CompositionTarget, Device3, Device, StatusPath, MagLibrary, CursorOwner
     if Closing
         return
     Closing := true
     SetTimer(FilterFrame, 0)
     if CursorHidden
-        try DllCall("Magnification\MagShowSystemCursor", "Int", true, "Int")
+        try RestoreVisualCursor(CursorOwner)
     ScreenFilterRelease(&Blur)
     ScreenFilterRelease(&Visual)
     ScreenFilterRelease(&Content)

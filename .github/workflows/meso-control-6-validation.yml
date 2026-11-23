@@ -247,6 +247,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          head=$(gh api "repos/$GH_REPO/git/ref/heads/release/6.1.4" --jq '.object.sha')
+          if [ "$head" != "$GITHUB_SHA" ]; then
+            echo 'A newer 6.1.4 build is being validated.'
+            exit 1
+          fi
           cd release
           zip=Meso_Control_6_1_4_COMPLETE.zip
           sha256sum -c "$zip.sha256"

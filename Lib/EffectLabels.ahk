@@ -7,3 +7,7 @@ CompactEffectNote(note) {
         return ""
     return SubStr(note, 1, 48)
 }
+
+ActiveEffectLabel(name) {
+    return SubStr(name, 1, 50)
+}

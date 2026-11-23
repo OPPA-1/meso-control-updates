@@ -451,13 +451,14 @@ TryActivateEffect(now) {
         Effect.End := now + Max(100, Effect.Sequence[Effect.Sequence.Length].At + 100)
         StartRecordedPlayback(Effect)
     } else if IsVisualEffect(p.Action) {
-        types := Map("Lights Out", "dark", "Tunnel Vision", "zoom", "Wide View", "wide", "Screen Shuffle", "puzzle", "Invert Screen", "mirror", "Drunk Vision", "drunk")
+        types := Map("Lights Out", "dark", "Tunnel Vision", "zoom", "Wide View", "wide", "Screen Shuffle", "puzzle", "Invert Screen", "mirror", "Drunk Vision", "drunk", "Hazy Vision", "blur", "Mirror Screen", "split")
         hit := PunishmentVaries(p) && (p.Action = "Lights Out" || p.Action = "Tunnel Vision" || p.Action = "Wide View") ? VisualHits.Get(p.Action, 0) + 1 : 0
         parameter := VisualStrength(p, hit)
         Effect.VisualFile := RuntimeDir "\visual-" ProcessExist() "-" NewId() ".state"
         Effect.VisualLaunch := now
         Effect.Note := "Starting visual effect"
-        cmd := Chr(34) A_AhkPath Chr(34) " " Chr(34) A_ScriptDir "\Meso_Visual_Effect.ahk" Chr(34) " " types[p.Action] " " target " " Effect.Duration " " parameter " " ProcessExist() " " Chr(34) Effect.VisualFile Chr(34)
+        worker := p.Action = "Hazy Vision" || p.Action = "Mirror Screen" ? "Meso_Screen_Filter.ahk" : "Meso_Visual_Effect.ahk"
+        cmd := Chr(34) A_AhkPath Chr(34) " " Chr(34) A_ScriptDir "\" worker Chr(34) " " types[p.Action] " " target " " Effect.Duration " " parameter " " ProcessExist() " " Chr(34) Effect.VisualFile Chr(34)
         try {
             pid := 0
             Run(cmd, A_ScriptDir, "", &pid)
@@ -765,7 +766,7 @@ AdvanceOneEffect(now) {
         case "Turn Keyboard Off":
             RefreshGameplayMouseLock()
             Effect.Next := now + 15
-        case "Lights Out", "Tunnel Vision", "Wide View", "Screen Shuffle", "Invert Screen", "Change Mouse Sensitivity":
+        case "Lights Out", "Tunnel Vision", "Wide View", "Screen Shuffle", "Invert Screen", "Hazy Vision", "Mirror Screen", "Change Mouse Sensitivity":
             Effect.Next := now + 50
     }
 }
@@ -851,7 +852,7 @@ IsWheelKey(key) {
 }
 
 IsVisualEffect(action) {
-    return InStr("|Lights Out|Tunnel Vision|Wide View|Screen Shuffle|Invert Screen|Drunk Vision|", "|" action "|") > 0
+    return InStr("|Lights Out|Tunnel Vision|Wide View|Screen Shuffle|Invert Screen|Drunk Vision|Hazy Vision|Mirror Screen|", "|" action "|") > 0
 }
 
 EffectsConflict(a, b) {
@@ -862,7 +863,7 @@ EffectsConflict(a, b) {
     if a = "Sliding Puzzle" || b = "Sliding Puzzle"
         return true
     if a = b
-        return a = "Chat Control" || a = "Random Loadout" || a = "Wide View" || a = "Change Mouse Sensitivity" || a = "Alt+Enter" || a = "Send Chat"
+        return a = "Chat Control" || a = "Random Loadout" || a = "Wide View" || a = "Change Mouse Sensitivity" || a = "Alt+Enter" || a = "Send Chat" || a = "Hazy Vision" || a = "Mirror Screen"
     return (a = "Alt+Enter" || a = "Random Loadout") && b = "Send Chat"
         || (b = "Alt+Enter" || b = "Random Loadout") && a = "Send Chat"
         || a = "Alt+Enter" && b = "Random Loadout" || b = "Alt+Enter" && a = "Random Loadout"

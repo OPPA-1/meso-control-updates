@@ -5,11 +5,13 @@
     seconds := IniRead(ConfigFile, "Rounds", "CooldownSeconds", "15")
     rounds := RoundCycle(mode, IsNumber(batch) ? batch : 5, IsNumber(seconds) ? seconds : 15)
     rounds.BonusPunishment := IniRead(ConfigFile, "Rounds", "BonusPunishment", "0") = "1"
+    chance := IniRead(ConfigFile, "Rounds", "BonusChance", "20")
+    rounds.BonusChance := IsNumber(chance) ? Max(0, Min(100, Float(chance))) : 20
     return rounds
 }
 
 BuildRoundSettings(gui) {
-    global Rounds, RoundModeDrop, RoundCountEdit, RoundCooldownEdit, RoundNotice, RoundBonusCheck
+    global Rounds, RoundModeDrop, RoundCountEdit, RoundCooldownEdit, RoundNotice, RoundBonusCheck, RoundBonusChance
     gui.SetFont("s12 Bold cF4EDF9", "Segoe UI")
     gui.AddText("x40 y132 w680 h30", "ROUND CONTROL")
     gui.SetFont("s10 Norm cD6C9E7", "Segoe UI")
@@ -23,13 +25,17 @@ BuildRoundSettings(gui) {
     BuildDirectSettings(gui)
     RoundBonusCheck := gui.AddCheckbox("x40 y495 w290 h23", "2× bonus punishment")
     RoundBonusCheck.Value := Rounds.BonusPunishment
+    gui.AddText("x358 y498 w160 h23", "Bonus chance (%)")
+    RoundBonusChance := gui.AddEdit("x530 y491 w100 h29 Background241B30 cFFFFFF", Rounds.BonusChance)
+    RoundBonusChance.Enabled := RoundBonusCheck.Value = 1
+    RoundBonusCheck.OnEvent("Click", (*) => RoundBonusChance.Enabled := RoundBonusCheck.Value = 1)
     RoundNotice := gui.AddText("x40 y522 w700 h30 cD3B7F3", "")
     button := gui.AddButton("x543 y554 w236 h36", "Save changes")
     button.OnEvent("Click", SaveRoundSettings)
 }
 
 SaveRoundSettings(*) {
-    global Rounds, Queue, Recorder, RoundModeDrop, RoundCountEdit, RoundCooldownEdit, RoundNotice, RoundBonusCheck, ConfigFile
+    global Rounds, Queue, Recorder, RoundModeDrop, RoundCountEdit, RoundCooldownEdit, RoundNotice, RoundBonusCheck, RoundBonusChance, ConfigFile
     if IsObject(Queue.Active) || Queue.Count() || HasEffects() || Recorder.Phase != "idle" {
         SetText(RoundNotice, "Pause and clear the queue before changing mode.")
         return
@@ -41,12 +47,18 @@ SaveRoundSettings(*) {
     }
     mode := RoundModeDrop.Value = 2 ? "auto" : RoundModeDrop.Value = 3 ? "batch" : "normal"
     bonus := RoundBonusCheck.Value
+    chance := Trim(RoundBonusChance.Value)
+    if !IsNumber(chance) || chance < 0 || chance > 100 {
+        SetText(RoundNotice, "Bonus chance: 0 to 100%.")
+        return
+    }
     try {
         SaveDirectSettings()
         MesoIniWrite(mode, ConfigFile, "Rounds", "Mode")
         MesoIniWrite(Integer(n), ConfigFile, "Rounds", "Spins")
         MesoIniWrite(seconds, ConfigFile, "Rounds", "CooldownSeconds")
         MesoIniWrite(bonus, ConfigFile, "Rounds", "BonusPunishment")
+        MesoIniWrite(chance, ConfigFile, "Rounds", "BonusChance")
     } catch as err {
         SetText(RoundNotice, "Could not save settings")
         LogEvent("Round settings save failed: " err.Message)
@@ -54,6 +66,7 @@ SaveRoundSettings(*) {
     }
     Rounds.Configure(mode, Integer(n), Float(seconds))
     Rounds.BonusPunishment := bonus = 1
+    Rounds.BonusChance := Float(chance)
     SetText(RoundNotice, "Saved")
     PublishState(true)
 }
@@ -83,7 +96,9 @@ PublishCooldown(now) {
 }
 
 PrepareSpin(job, pool, now) {
-    global Clock
+    global Clock, Rounds
+    if !job.HasOwnProp("BonusRoll")
+        job.BonusRoll := !(job.HasOwnProp("Spins") && job.Spins = 2) && IsSet(Rounds) && RollBonusPunishment(Rounds)
     job.Pool := pool
     job.Index := WeightedPick(pool)
     job.P := pool[job.Index].Clone()
@@ -99,7 +114,11 @@ SpinEffectCount(job) {
     global Rounds
     if job.HasOwnProp("Spins") && job.Spins = 2
         return job.HasOwnProp("FirstResult") ? 2 : 0
-    return Rounds.BonusPunishment ? 2 : 1
+    return job.HasOwnProp("BonusRoll") && job.BonusRoll ? 2 : 1
+}
+
+RollBonusPunishment(rounds, roll := -1) {
+    return rounds.BonusPunishment && (roll < 0 ? Random(0.0, 100.0) : roll) < rounds.BonusChance
 }
 
 LandSpin(job, now) {
@@ -114,7 +133,7 @@ LandSpin(job, now) {
     job.VisualUntil := now + 3000
     if job.HasOwnProp("FirstResult")
         StartEffect(job.FirstResult, job.Preview, now, job.Id)
-    if !job.HasOwnProp("FirstResult") && IsSet(Rounds) && Rounds.BonusPunishment {
+    if !job.HasOwnProp("FirstResult") && job.HasOwnProp("BonusRoll") && job.BonusRoll {
         choices := []
         for candidate in job.Pool
             if CompatibleWheelPick(candidate, [job.P])

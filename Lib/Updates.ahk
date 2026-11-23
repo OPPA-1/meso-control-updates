@@ -3,7 +3,7 @@
     DirCreate(A_ScriptDir "\.updates")
     repository := IniRead(ConfigFile, "Updates", "GitHubRepo", "OPPA-1/meso-control-updates")
     auto := IniRead(ConfigFile, "Updates", "ForceAuto", "1") = "1"
-    Updates := {Pid: 0, Operation: "", LastCheck: auto ? NowMs() - 600000 : NowMs(), AutoCheck: auto, RetryAfter: 0, OutputPrepareAt: 0, Ready: FileExist(A_ScriptDir "\.updates\ready.json") != "", Requested: false, Applying: false, StartedAt: 0, Message: repository = "" ? "Repository not set" : "Ready", Version: "", Repository: repository}
+    Updates := {Pid: 0, Operation: "", LastCheck: auto ? NowMs() - 600000 : NowMs(), AutoCheck: auto, RetryAfter: 0, OutputPrepareAt: 0, Ready: FileExist(A_ScriptDir "\.updates\ready.json") != "", ReadyAt: NowMs(), Requested: false, Applying: false, StartedAt: 0, Message: repository = "" ? "Repository not set" : "Ready", Version: "", Repository: repository}
     state := IniRead(A_ScriptDir "\.updates\status.ini", "Update", "State", "")
     if state = "error"
         Updates.RetryAfter := NowMs()+600000
@@ -63,7 +63,7 @@ BuildUpdateSettings(gui) {
     gui.SetFont("s12 Bold cF4EDF9", "Segoe UI")
     gui.AddText("x40 y130 w700 h28", "UPDATES")
     gui.SetFont("s9 Norm cD6C9E7", "Segoe UI")
-    gui.AddText("x40 y159 w735 h21", "Meso Control " IniRead(A_ScriptDir "\version.ini", "App", "Version", "6.1.3"))
+    gui.AddText("x40 y159 w735 h21", "Meso Control " IniRead(A_ScriptDir "\version.ini", "App", "Version", "6.1.4"))
     UpdateStatusLabel := gui.AddText("x40 y180 w735 h43 cD3B7F3", Updates.Message)
     gui.AddText("x40 y239 w730 h22", "Repository  (owner/repo)")
     UpdateRepoEdit := gui.AddEdit("x40 y270 w555 h34 Background241B30 cFFFFFF", Updates.Repository)
@@ -119,6 +119,8 @@ SaveUpdatePreferences(*) {
         return
     }
     Updates.AutoCheck := selected
+    if !selected
+        Updates.Requested := false
     Updates.LastCheck := selected ? NowMs() - 600000 : NowMs()
     Updates.Message := selected ? "Automatic updates on · Every 10 minutes" : "Automatic updates off"
 }
@@ -155,13 +157,16 @@ RequestUpdateInstall(*) {
         return
     }
     Updates.Requested := true
-    Updates.Message := "Update requested. It will install after all active rounds and effects finish."
+    Updates.RetryAfter := 0
+    Updates.ReadyAt := NowMs()-2000
+    Updates.Message := "Installing when active tasks finish"
+    CloseSettings()
 }
 
-UpdateCanInstall(now) {
+UpdateCanInstall(now, allowSettings := false) {
     global Queue, Rounds, Slots, Clock, Recorder, HorrorEvents, DirectPending
     global SettingsGui, PendingAltEnterRestores
-    if GuiHwndSafe(SettingsGui) || SequenceBusy(now) || IsSet(PendingAltEnterRestores) && PendingAltEnterRestores.Count
+    if !allowSettings && GuiHwndSafe(SettingsGui) || SequenceBusy(now) || IsSet(PendingAltEnterRestores) && PendingAltEnterRestores.Count
         return false
     if IsObject(Queue.Active) || HasEffects() || DirectPending.Length || Recorder.Phase != "idle" || Slots.Phase = "spin" || Clock.Phase = "prep" || Clock.Phase = "activity" || Rounds.Phase = "running" || Rounds.Cooling(now)
         return false
@@ -175,6 +180,10 @@ RefreshUpdateStatus(*) {
     global Updates, SettingsGui, UpdateStatusLabel, UpdateInstallButton, UpdateRollbackButton
     if !IsSet(Updates)
         return
+    ready := FileExist(A_ScriptDir "\.updates\ready.json") != ""
+    if ready && !Updates.Ready
+        Updates.ReadyAt := NowMs()
+    Updates.Ready := ready
     if Updates.Pid {
         statusFile := A_ScriptDir "\.updates\status.ini"
         state := IniRead(statusFile, "Update", "State", "")
@@ -212,19 +221,21 @@ RefreshUpdateStatus(*) {
     if GuiHwndSafe(SettingsGui) && IsSet(UpdateStatusLabel) && IsObject(UpdateStatusLabel) {
         try SetText(UpdateStatusLabel, Updates.Message (Updates.Version != "" ? "`nVersion " Updates.Version : ""))
         if IsSet(UpdateInstallButton) && IsObject(UpdateInstallButton)
-            try UpdateInstallButton.Enabled := Updates.Ready && !Updates.Requested && !(Updates.Pid && ProcessExist(Updates.Pid))
+            try UpdateInstallButton.Enabled := Updates.Ready && !Updates.Applying && !(Updates.Pid && ProcessExist(Updates.Pid))
         if IsSet(UpdateRollbackButton) && IsObject(UpdateRollbackButton)
             try UpdateRollbackButton.Enabled := RollbackAvailable() && !(Updates.Pid && ProcessExist(Updates.Pid))
     }
 }
 
 UpdatesTick(now) {
-    global Updates, OutputPid, OutputEnabled, Queue, ConfigFile
+    global Updates, OutputPid, OutputEnabled, Queue, ConfigFile, SettingsGui
     if !IsSet(Updates)
         return false
     if Updates.AutoCheck && Updates.Ready && now >= Updates.RetryAfter
         Updates.Requested := true
-    if !Updates.Pid && Updates.Requested && Updates.Ready && UpdateCanInstall(now) {
+    if !Updates.Pid && Updates.Requested && Updates.Ready && UpdateCanInstall(now, true) && now-Updates.ReadyAt >= 1500 {
+        if GuiHwndSafe(SettingsGui)
+            CloseSettings()
         if !PrepareOutputForUpdate(now)
             return false
         try {

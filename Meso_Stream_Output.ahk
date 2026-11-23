@@ -568,8 +568,7 @@ DrawActive(c, now) {
         isWaiting := note="Focus game" || note="Queued"
         sensitivity := RegExMatch(note,"^(High|Low)  ")
         detail := isWaiting ? note : InStr(note,"Solve puzzle") ? "Solve to continue" : Format("{:.1f}s", Max(0, item[3]+0-now)/1000)
-        pair := item.Length>=6 && item[6]="1"
-        label := (pair ? "2× " : "") SubStr(item[2],1,50)
+        label := ActiveEffectLabel(item[2])
         c.TextNoWrap(label, 855, y, 1008, items.Length=1 ? 42 : 29, items.Length=1 ? 31 : 23, 0xFFFFFFFF, true)
         if items.Length=1 {
             rise := sensitivity ? Round(8*(1-Min(1,Max(0,now-item[5])/420))**2) : 0

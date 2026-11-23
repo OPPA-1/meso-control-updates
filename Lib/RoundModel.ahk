@@ -1,5 +1,6 @@
 ﻿class RoundCycle {
     BonusPunishment := false
+    BonusChance := 20
     __New(mode := "normal", batch := 5, seconds := 15) {
         this.Configure(mode, batch, seconds)
     }

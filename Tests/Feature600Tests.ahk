@@ -142,6 +142,7 @@ try {
     TestFeature612()
     TestUpdateSession612()
     TestPuzzleController612()
+    TestFeature614()
     Check(DirectArguments(5, 'C:\Meso Control\Meso_Wheel_Trigger.vbs') = '//B //NoLogo "C:\Meso Control\Meso_Wheel_Trigger.vbs" --direct 5 %userName%', "Copied Streamer.bot arguments preserve the quoted path")
     state := Line("meta", 1, 1, 2000) Line("status", 0, 0, 0) Line("wheel", "idle", "", 0, 0, "", 0, 0)
     state .= Line("slots", "idle", "", 0, 0, 0, 0, 0, "", "", "", "") Line("timer", "idle", 0, 0, 0)
@@ -171,6 +172,56 @@ Check(result, description) {
 }
 
 PublishState(*) {
+}
+
+TestFeature614() {
+    global Rounds, ConfigFile, Punishments
+    saved := Rounds
+    try {
+        r := RoundCycle()
+        Check(!r.BonusPunishment && r.BonusChance = 20, "Bonus defaults off with a 20% chance")
+        Check(!RollBonusPunishment(r, 0), "Disabled bonus never rolls")
+        r.BonusPunishment := true
+        hits := 0
+        loop 10000
+            hits += RollBonusPunishment(r, (A_Index-1)/100)
+        Check(hits = 2000, "Default bonus occupies exactly 20% of the roll range")
+        r.BonusChance := 0
+        Check(!RollBonusPunishment(r, 0), "Zero chance never adds a bonus")
+        r.BonusChance := 100
+        Check(RollBonusPunishment(r, 99.99), "100% chance always adds a bonus")
+        Rounds := r
+        a := {Name:"Hazy Vision",Action:"Hazy Vision",Weight:1,Duration:3,Value:12}
+        b := {Name:"Mirror Screen",Action:"Mirror Screen",Weight:1,Duration:3,Value:0}
+        j := {Id:"614-bonus",Preview:true,Spins:1}
+        PrepareSpin(j,[a,b],1000)
+        Rounds.BonusChance := 0
+        Check(SpinEffectCount(j)=2 && j.BonusRoll, "The bonus is rolled once per spin and keeps its reservation")
+        LandSpin(j,9000)
+        Check(HasEffects(j.Id), "New visuals run through the ordinary punishment lifecycle")
+        CancelEffects()
+        Check(!HasEffects(j.Id), "Cancellation clears both bonus effects")
+        Rounds.BonusChance := 100
+        j := {Id:"614-double",Preview:true,Spins:2}
+        PrepareSpin(j,[a,b],1000)
+        Check(!j.BonusRoll && SpinEffectCount(j)=0, "Two-spin rewards do not get a third bonus effect")
+        IniWrite(37.5,ConfigFile,"Rounds","BonusChance")
+        Check(LoadRoundSettings().BonusChance=37.5, "Custom bonus chance survives reload")
+        Check(ActiveEffectLabel("Drunk Vision")="Drunk Vision" && ActiveEffectLabel("Bounce House")="Bounce House", "Active rows do not repeat the bonus multiplier")
+        blur := 0
+        for p in Punishments
+            if p.Action="Hazy Vision"
+                blur := p
+        Check(IsObject(blur) && !PunishmentVaries(blur) && blur.Value=12, "Hazy Vision migrates once with random off")
+        Check(FixedPunishmentValue({Action:"Hazy Vision",Value:90})=40 && FixedPunishmentValue({Action:"Hazy Vision",Value:0})=12, "Blur uses its displayed 1 to 40 range")
+        Check(VisualStrength({Action:"Hazy Vision",Value:7,Vary:false},0)=7, "Fixed blur respects the saved strength")
+        loop 100 {
+            strength := VisualStrength({Action:"Hazy Vision",Value:7,Vary:true},0)
+            Check(strength>=6 && strength<=40, "Random blur stays in its supported range")
+        }
+        Check(IsVisualEffect("Hazy Vision") && IsVisualEffect("Mirror Screen"), "New visuals participate in direct rewards and wheel effects")
+        Check(!EffectsConflict("Hazy Vision","Lights Out") && !EffectsConflict("Mirror Screen","Lights Out"), "New effects can overlap darkness")
+    } finally Rounds := saved
 }
 
 TestVbsRewards() {
@@ -266,6 +317,7 @@ TestFeature603(p1, p2) {
     Rounds := LoadRoundSettings()
     Check(!Rounds.BonusPunishment, "Bonus punishment defaults off")
     Rounds.BonusPunishment := true
+    Rounds.BonusChance := 100
     job := {Id: "bonus-test", Preview: true, Spins: 1}
     PrepareSpin(job, [p1, p2], 1000)
     LandSpin(job, 9000)

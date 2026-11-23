@@ -6,6 +6,7 @@
 #Include Lib\PuzzleModel.ahk
 #Include Lib\Draw.ahk
 #Include Lib\InteractionPointer.ahk
+#Include Lib\PuzzleBadge.ahk
 RuntimeDir := A_ScriptDir "\runtime"
 DirCreate(RuntimeDir)
 if A_Args.Length != 4
@@ -37,8 +38,7 @@ try {
     Header := PuzzleGui.AddText("x12 y8 w" (GW-24) " h28 Center Background160F20", "SLIDING PUZZLE · Drag tiles into the gap")
     PuzzleGui.SetFont("s14 Bold cBD8CF4", "Segoe UI")
     BlankLabel := PuzzleGui.AddText("x0 y0 w1 h1 Center +0x200 Background241733", "SLIDE HERE")
-    loop 2
-        GapIcons.Push(PuzzleGui.AddPicture("x0 y0 w1 h1", A_ScriptDir "\Meso_Icon.png"))
+    GapIcons := CreatePuzzleBadges(PuzzleGui.Hwnd)
     loop GridSize*GridSize-1 {
         thumbnail := 0
         if DllCall("dwmapi\DwmRegisterThumbnail", "Ptr", PuzzleGui.Hwnd, "Ptr", Target, "Ptr*", &thumbnail, "Int") < 0
@@ -70,14 +70,12 @@ PuzzleCellRect(cell) {
     return {X: x, Y: y, W: Round((col+1)*GW/GridSize)-x, H: top+Round((row+1)*height/GridSize)-y}
 }
 RenderPuzzle(now) {
-    global Board, Tiles, GridSize, GW, GH, Blank, BlankLabel, GapIcons, Animation, Drag
+    global Board, Tiles, GridSize, GW, GH, GX, GY, Blank, BlankLabel, GapIcons, Animation, Drag
     blankRect := PuzzleCellRect(Blank)
     ; Move the gap controls only when the blank changes, then erase the old static-control pixels.
     if !BlankLabel.HasOwnProp("Cell") || BlankLabel.Cell != Blank {
         BlankLabel.Move(blankRect.X+3, blankRect.Y+3, blankRect.W-6, blankRect.H-6)
-        iconSize := Max(24, Min(54, Round(Min(blankRect.W,blankRect.H)*0.20)))
-        GapIcons[1].Move(blankRect.X+blankRect.W-iconSize-14, blankRect.Y+14, iconSize,iconSize)
-        GapIcons[2].Move(blankRect.X+14, blankRect.Y+blankRect.H-iconSize-14, iconSize,iconSize)
+        PositionPuzzleBadges(GapIcons, GX+blankRect.X, GY+blankRect.Y, blankRect.W, blankRect.H)
         BlankLabel.Cell := Blank
         DllCall("user32\RedrawWindow","Ptr",BlankLabel.Gui.Hwnd,"Ptr",0,"Ptr",0,"UInt",0x185)
     }
@@ -182,7 +180,7 @@ PuzzleReport(phase, note) {
     WriteAtomic(StatusPath, Line(ProcessExist(), NowMs(), phase, note, GuiHwndSafe(PuzzleGui)))
 }
 PuzzleCleanup(*) {
-    global Hook, HookProc, Tiles, PuzzleGui, Finished, PointerOwner, Target, PreviousClip, Guard
+    global Hook, HookProc, Tiles, PuzzleGui, Finished, PointerOwner, Target, PreviousClip, Guard, GapIcons
     SetTimer(PuzzleTick, 0)
     if IsObject(Guard)
         Guard.Close()
@@ -191,6 +189,7 @@ PuzzleCleanup(*) {
     if HookProc
         CallbackFree(HookProc)
     CloseInteractionPointer(PointerOwner)
+    ClosePuzzleBadges(GapIcons)
     for tile in Tiles
         DllCall("dwmapi\DwmUnregisterThumbnail", "Ptr", tile.Thumbnail)
     focused := GuiHwndSafe(PuzzleGui) && WinActive("ahk_id " PuzzleGui.Hwnd)

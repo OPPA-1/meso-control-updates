@@ -112,6 +112,8 @@ DefaultPunishments() {
         {Name: "Tunnel Vision", Enabled: true, Duration: 8, Weight: 2, Action: "Tunnel Vision", Keys: "", Value: 2},
         {Name: "Screen Shuffle", Enabled: true, Duration: 8, Weight: 2, Action: "Screen Shuffle", Keys: "", Value: 0},
         {Name: "Invert Screen", Enabled: true, Duration: 8, Weight: 2, Action: "Invert Screen", Keys: "", Value: 0, Vary: true, Flip: "Horizontal"},
+        {Name: "Hazy Vision", Enabled: true, Duration: 8, Weight: 2, Action: "Hazy Vision", Keys: "", Value: 12, Vary: false},
+        {Name: "Mirror Screen", Enabled: true, Duration: 8, Weight: 2, Action: "Mirror Screen", Keys: "", Value: 0},
         {Name: "Drunk Vision", Enabled: true, Duration: 8, Weight: 2, Action: "Drunk Vision", Keys: "", Value: 3},
         {Name: "Loadout Roulette", Enabled: true, Duration: 4, Weight: 4, Action: "Random Loadout", Keys: "", Value: 12},
         {Name: "Turn Keyboard Off", Enabled: true, Duration: 5, Weight: 4, Action: "Turn Keyboard Off", Keys: "", Value: 0},
@@ -123,7 +125,7 @@ DefaultPunishments() {
 }
 
 ActionNames() {
-    return ["Sliding Puzzle", "Jumpscare", "Movement Jam", "Spam Crouch", "Spam Jump", "Exit Desktop", "Random Shoot", "Cycle Keys", "Look Down + Shoot", "Spin 360", "Inventory Spam", "Use Super", "Time Tax", "Send Chat", "Return to Orbit", "Lights Out", "Tunnel Vision", "Screen Shuffle", "Invert Screen", "Drunk Vision", "Random Loadout", "Recorded Sequence", "Custom Sequence", "Spam Key", "Chat Control", "Turn Keyboard Off", "Alt+Enter", "Wide View", "Change Mouse Sensitivity"]
+    return ["Sliding Puzzle", "Jumpscare", "Movement Jam", "Spam Crouch", "Spam Jump", "Exit Desktop", "Random Shoot", "Cycle Keys", "Look Down + Shoot", "Spin 360", "Inventory Spam", "Use Super", "Time Tax", "Send Chat", "Return to Orbit", "Lights Out", "Tunnel Vision", "Screen Shuffle", "Invert Screen", "Drunk Vision", "Random Loadout", "Recorded Sequence", "Custom Sequence", "Spam Key", "Chat Control", "Turn Keyboard Off", "Alt+Enter", "Wide View", "Change Mouse Sensitivity", "Hazy Vision", "Mirror Screen"]
 }
 
 LoadAndMigratePunishments() {
@@ -251,6 +253,19 @@ LoadAndMigratePunishments() {
                     result.Push(p.Clone())
         needsSave := true
     }
+    if IniRead(path, "Meta", "Feature614", "0") != "1" {
+        for candidate in defaults {
+            if candidate.Action != "Hazy Vision" && candidate.Action != "Mirror Screen"
+                continue
+            found := false
+            for existing in result
+                if existing.Action = candidate.Action
+                    found := true
+            if !found && result.Length < 200
+                result.Push(candidate.Clone())
+        }
+        needsSave := true
+    }
     if needsSave {
         try SavePunishmentList(result)
         catch as err
@@ -299,6 +314,7 @@ SavePunishmentList(list, profile := "") {
         IniWrite("1", staged, "Meta", "Feature603")
         IniWrite("1", staged, "Meta", "Feature610")
         IniWrite("1", staged, "Meta", "Feature612")
+        IniWrite("1", staged, "Meta", "Feature614")
         CommitIniFile(staged, path)
         return true
     } finally {
@@ -653,10 +669,10 @@ UpdateEditorHint(*) {
     global EditorRawKeys
     shared := SharedKeysForAction(action, KeyTokens(EditorRawKeys))
     hasKeys := shared.Length || InStr("|Spam Key|Exit Desktop|Return to Orbit|Send Chat|Custom Sequence|Recorded Sequence|", "|" action "|")
-    valueLabels := Map("Spam Crouch", "Pulse ms", "Exit Desktop", "Delay ms", "Spin 360", "Step", "Lights Out", "Darkness", "Tunnel Vision", "Zoom", "Wide View", "Scale", "Screen Shuffle", "Grid", "Invert Screen", "Flip", "Sliding Puzzle", "Grid", "Random Loadout", "Slots", "Change Mouse Sensitivity", "Multiplier", "Alt+Enter", "Gap (sec)", "Drunk Vision", "Sway")
-    variable := InStr("|Lights Out|Tunnel Vision|Wide View|Screen Shuffle|Sliding Puzzle|Invert Screen|Change Mouse Sensitivity|", "|" action "|") > 0
+    valueLabels := Map("Spam Crouch", "Pulse ms", "Exit Desktop", "Delay ms", "Spin 360", "Step", "Lights Out", "Darkness", "Tunnel Vision", "Zoom", "Wide View", "Scale", "Screen Shuffle", "Grid", "Invert Screen", "Flip", "Sliding Puzzle", "Grid", "Random Loadout", "Slots", "Change Mouse Sensitivity", "Multiplier", "Alt+Enter", "Gap (sec)", "Drunk Vision", "Sway", "Hazy Vision", "Blur")
+    variable := InStr("|Lights Out|Tunnel Vision|Wide View|Screen Shuffle|Sliding Puzzle|Invert Screen|Change Mouse Sensitivity|Hazy Vision|", "|" action "|") > 0
     EditorVary.Visible := variable
-    EditorVary.Text := action = "Invert Screen" || action = "Screen Shuffle" || action = "Sliding Puzzle" || action = "Change Mouse Sensitivity" ? "Random" : "Progressive"
+    EditorVary.Text := action = "Invert Screen" || action = "Screen Shuffle" || action = "Sliding Puzzle" || action = "Change Mouse Sensitivity" || action = "Hazy Vision" ? "Random" : "Progressive"
     EditorKeyLabel.Visible := hasKeys
     EditorKeys.Visible := hasKeys
     EditorKeys.Enabled := !shared.Length

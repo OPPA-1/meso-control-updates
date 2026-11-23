@@ -131,11 +131,11 @@ try {
         throw Error("Game lost focus during visual startup")
     ReportVisual("starting", "Showing visual window")
     EffectGui.Show("NoActivate x" x " y" y " w" w " h" h)
-    if mode = "wide" {
+    if mode = "wide" || mode = "mirror" {
         OnMessage(0x20, HideOverlayCursor)
         WideCursorHidden := DllCall("Magnification\MagShowSystemCursor", "Int", false, "Int") != 0
         if !WideCursorHidden
-            LogEvent("Wide View could not hide the Windows system cursor")
+            LogEvent("Visual effect could not hide the Windows system cursor")
     }
     if !DllCall("user32\IsWindowVisible", "Ptr", EffectGui.Hwnd, "Int")
         throw Error("Visual overlay window did not become visible")

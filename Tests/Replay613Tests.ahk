@@ -26,6 +26,8 @@ try {
     deadline := NowMs()+1500
     while !item.ReplayDone && NowMs()<deadline
         Sleep(1)
+    ; Low-level mouse hooks are delivered after the critical replay tick returns.
+    Sleep(60)
     if failed!=""
         throw Error(failed)
     if !item.ReplayDone || received.Length!=4 || item.SentDown!=3 || item.SentUp!=3 || GameKeyOwners.Count
@@ -46,7 +48,7 @@ try {
             moved := true
     }
     if !wheelFound || !sideDown || !sideUp || !moved
-        throw Error("Replay lost wheel magnitude, a side-button edge or mouse movement")
+        throw Error("Replay input observation: wheel=" wheelFound " side-down=" sideDown " side-up=" sideUp " move=" moved)
     ; Cancellation must release a key whose recorded up event has not run yet.
     item.Index := 1, item.Sequence := [{At:0,Kind:"down",Key:"vk41sc01E",X:0,Y:0},{At:1000,Kind:"up",Key:"vk41sc01E",X:0,Y:0}]
     StartRecordedPlayback(item)

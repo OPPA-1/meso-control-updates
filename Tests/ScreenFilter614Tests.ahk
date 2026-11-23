@@ -78,7 +78,7 @@ StartFilter614(mode,target,amount,status) {
     WinActivate("ahk_id " target)
     pid := 0
     command := Chr(34) A_AhkPath Chr(34) " /ErrorStdOut=UTF-8 " Chr(34) A_ScriptDir "\..\Meso_Screen_Filter.ahk" Chr(34)
-        " " mode " " target " 12000 " amount " " ProcessExist() " " Chr(34) status Chr(34)
+    command .= " " mode " " target " 12000 " amount " " ProcessExist() " " Chr(34) status Chr(34)
     Run(command,,, &pid)
     deadline := NowMs()+7000, packet := []
     while NowMs()<deadline {

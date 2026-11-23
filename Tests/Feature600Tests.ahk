@@ -191,8 +191,8 @@ TestFeature614() {
         r.BonusChance := 100
         Check(RollBonusPunishment(r, 99.99), "100% chance always adds a bonus")
         Rounds := r
-        a := {Name:"Hazy Vision",Action:"Hazy Vision",Weight:1,Duration:3,Value:12}
-        b := {Name:"Mirror Screen",Action:"Mirror Screen",Weight:1,Duration:3,Value:0}
+        a := {Name:"Hazy Vision",Action:"Hazy Vision",Keys:"",Weight:1,Duration:3,Value:12}
+        b := {Name:"Mirror Screen",Action:"Mirror Screen",Keys:"",Weight:1,Duration:3,Value:0}
         j := {Id:"614-bonus",Preview:true,Spins:1}
         PrepareSpin(j,[a,b],1000)
         Rounds.BonusChance := 0

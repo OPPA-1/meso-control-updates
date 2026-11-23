@@ -8,7 +8,7 @@ SetTimer(PrepareSessionTest614,-1000)
 
 PrepareSessionTest614() {
     global Updates, WheelControllerEnabled, ConfigFile, RuntimeDir, Queue, Clock, Slots, Guides, VisualHits, AppGui, OutputPid
-    global UpdateInstallButton, RoundBonusChance, RoundBonusCheck, EditorRange, EditorValue
+    global UpdateInstallButton, RoundBonusChance, RoundBonusCheck, EditorRange, EditorValue, SettingsGui
     global ScareLocalSlider, ScareStreamSlider, EditorAction, EditorGrid, EditorVary, EditorDuration, ScareLocalVolume, ScareStreamVolume
     try {
         Updates.AutoCheck := false
@@ -96,10 +96,11 @@ PrepareSessionTest614() {
         DumpSessionTest614()
         Critical("On")
         OpenSettings()
+        SettingsGui["SysTabControl321"].Choose(9)
         Updates.Requested := true
         RefreshUpdateStatus()
         if !UpdateInstallButton.Enabled
-            throw Error("A staged update must remain installable while Settings is open")
+            throw Error("A staged update must remain installable while Settings is open: ready=" Updates.Ready " applying=" Updates.Applying " pid=" Updates.Pid " requested=" Updates.Requested)
         Updates.Requested := false
         Updates.AutoCheck := true
         Updates.ReadyAt := NowMs()-2000
